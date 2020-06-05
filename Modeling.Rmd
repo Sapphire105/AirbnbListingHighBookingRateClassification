@@ -1,0 +1,625 @@
+---
+title: "Modeling"
+author: "Sahitya"
+date: "29/04/2020"
+output: html_document
+---
+
+
+```{r}
+fset = c("accommodates",
+"availability_30",
+"availability_365",
+"availability_60",
+"availability_90",
+"extra_people",
+"guests_included",
+"host_has_profile_pic",
+"host_identity_verified",
+"host_is_superhost",
+"host_listings_count",
+"host_response_rate",
+"instant_bookable",
+"is_location_exact",
+"maximum_nights",
+"require_guest_phone_verification",
+"require_guest_profile_picture",
+"requires_license",
+"host_lowExp",
+"host_lowMedExp",
+"host_medExp",
+"host_medHighExp",
+"host_highExp",
+"NoGap_sTor",
+"Yr1Gap_sTor",
+"HighGap_sTor",
+"In_NAS",
+"In_LA",
+"In_SD",
+"In_WDC",
+"In_NWO",
+"In_SFO",
+"In_NYC",
+"In_SEA",
+"In_CHI",
+"In_BOS",
+"In_AUS",
+"In_PO",
+"In_DEN",
+"In_SCU",
+"In_OAK",
+"In_ASH",
+"CancelPol_Strict",
+"CancelPol_Mod",
+"CancelPol_Flexy",
+"WholePlace",
+"PrivateRoom",
+"SharedRoom",
+"propertyApartment",
+"propertyHouse",
+"propertyHotel",
+"propertyHoliday",
+"propertyOther",
+"bed_Real",
+"bed_Uncomfy",
+"hRes_FewDays",
+"hRes_1Day",
+"hRes_FewHours",
+"hRes_1Hour",
+"verifs_vLow",
+"verifs_Med",
+"verifs_High",
+"verifs_VHigh",
+"facebookVer",
+"googleVer",
+"govtIDVer",
+"jumioVer",
+"kbaVer",
+"vlowAmens",
+"lowAmens",
+"medAmens",
+"highAmens",
+"vhighAmens",
+"hasKitchen1",
+"hasKitchen2",
+"hasHeating",
+"hasAC",
+"hasTV",
+"hasWiFi",
+"PetsAllowed",
+"hasLuxuryAmens",
+"petsLiveHere",
+"hasWorkspace",
+"hasFreeParking",
+"extraBedding",
+"hasElevator",
+"hasPrivacyAmens",
+"NoSmoking",
+"isHost_in_US",
+"secDep0",
+"secDepGen",
+"secDepHigh",
+"vlow_pPG",
+"low_pPG",
+"med_pPG",
+"high_pPG",
+"vHigh_pPG",
+"beds_Comfy",
+"beds_Cramped",
+"beds_Excess",
+"baths_Comfy",
+"baths_Cramped",
+"baths_Excess",
+"bedrooms_Comfy",
+"bedrooms_Cramped",
+"bedrooms_Excess",
+"minNigh1",
+"minNigh2",
+"minNigh3",
+"minNight_Excess")
+
+df <- df_x[, fset]
+```
+
+Handle missingness
+
+```{r}
+# View(colSums(is.na(df)))
+
+# NoGap_sTor	222
+df$NoGap_sTor[is.na(df$NoGap_sTor)] <- 1
+# Yr1Gap_sTor	222
+# HighGap_sTor	222
+
+# host_listings_count	151
+df$host_listings_count[is.na(df$host_listings_count)] <- 2
+
+# host_lowExp	151
+df$host_lowExp[is.na(df$host_lowExp)] <- 1
+# host_lowMedExp	151
+# host_medExp	151
+# host_medHighExp	151
+# host_highExp	151
+
+# host_identity_verified	148
+df$host_identity_verified[is.na(df$host_identity_verified)] <- 1
+
+# host_has_profile_pic	142
+df$host_has_profile_pic[is.na(df$host_has_profile_pic)] <- 1
+
+# host_is_superhost	142
+# is_location_exact	19
+
+# maximum_nights	19
+df$maximum_nights[is.na(df$maximum_nights)] <- 9.8635
+
+# require_guest_phone_verification	19
+# require_guest_profile_picture	19
+# requires_license	19
+
+# WholePlace	19
+# PrivateRoom	19
+df$PrivateRoom[is.na(df$PrivateRoom)] <- 1
+# SharedRoom	19
+
+# verifs_vLow	19
+# verifs_Med	19
+df$verifs_Med[is.na(df$verifs_Med)] <- 1
+# verifs_High	19
+# verifs_VHigh	19
+
+# secDep0	19
+df$secDep0[is.na(df$secDep0)] <- 1
+# secDepGen	19
+# secDepHigh	19
+
+# vlow_pPG	19
+# low_pPG	19
+# med_pPG	19
+df$med_pPG[is.na(df$med_pPG)] <- 1
+# high_pPG	19
+# vHigh_pPG	19
+
+
+# minNigh1	19
+df$minNigh1[is.na(df$minNigh1)] <- 1
+# minNigh2	19
+# minNigh3	19
+# minNight_Excess
+
+# df_y.high_booking_rate	19
+# df$df_y.high_booking_rate[is.na(df$df_y.high_booking_rate)] <- 0
+
+# instant_bookable	12
+df$instant_bookable[is.na(df$instant_bookable)] <- 1
+
+# accommodates	9
+df$accommodates[is.na(df$accommodates)] <- 50
+
+# availability_30	9
+df$availability_30[is.na(df$availability_30)] <- 3.5
+
+# availability_365	9
+df$availability_365[is.na(df$availability_365)] <- 16
+
+# availability_60	9
+df$availability_60[is.na(df$availability_60)] <- 6.5
+
+# availability_90	9
+df$availability_90[is.na(df$availability_90)] <- 10.7
+
+# extra_people	9
+df$extra_people[is.na(df$extra_people)] <- 2
+
+# In_NAS	9
+# In_LA	9
+# In_SD	9
+# In_WDC	9
+df$In_WDC[is.na(df$In_WDC)] <- 1
+# In_NWO	9
+# In_SFO	9
+# In_NYC	9
+df$In_NYC[is.na(df$In_NYC)] <- 0
+# In_SEA	9
+# In_CHI	9
+# In_BOS	9
+# In_AUS	9
+# In_PO	9
+# In_DEN	9
+# In_SCU	9
+# In_OAK	9
+# In_ASH	9
+
+# CancelPol_Mod	9
+df$CancelPol_Mod[is.na(df$CancelPol_Mod)] <- 1
+# CancelPol_Flexy	9
+
+# bed_Real	9
+df$bed_Real[is.na(df$bed_Real)] <- 1
+
+# vlowAmens	9
+# lowAmens	9
+# medAmens	9
+df$medAmens[is.na(df$medAmens)] <- 1
+# highAmens	9
+# vhighAmens	9
+
+df <- df %>% replace(is.na(.), 0)
+
+```
+
+Check if there is anymore missingness
+
+```{r}
+# View(colSums(is.na(df)))
+```
+
+Treat missingness in the validation set 
+
+```{r}
+
+td <- tdf[,fset]
+
+# hRes_FewDays	1983
+# hRes_1Day	1983
+# hRes_FewHours	1983
+td$hRes_FewHours[is.na(td$hRes_FewHours)] <- 1
+# hRes_1Hour	1983
+
+
+# NoGap_sTor	29
+# Yr1Gap_sTor	29
+# HighGap_sTor	29
+td$NoGap_sTor[is.na(td$NoGap_sTor)] <- 1
+
+# host_identity_verified	23
+td$host_identity_verified[is.na(td$host_identity_verified)] <- 1
+
+# host_listings_count	23
+td$host_listings_count[is.na(td$host_listings_count)] <- 2
+
+# host_lowExp	23
+# host_lowMedExp	23
+# host_medExp	23
+# host_medHighExp	23
+# host_highExp	23
+td$host_medExp[is.na(td$host_medExp)] <- 1
+
+# host_has_profile_pic	21
+td$host_has_profile_pic[is.na(td$host_has_profile_pic)] <- 1
+
+
+# host_is_superhost	21
+td$host_is_superhost[is.na(td$host_is_superhost)] <- 0
+
+# is_location_exact	3
+td$is_location_exact[is.na(td$is_location_exact)] <- 1
+
+# maximum_nights	3
+td$maximum_nights[is.na(td$maximum_nights)] <- 9.8
+
+
+# require_guest_phone_verification	3
+td$require_guest_phone_verification[is.na(td$require_guest_phone_verification)] <- 0
+
+# require_guest_profile_picture	3
+td$require_guest_profile_picture[is.na(td$require_guest_profile_picture)] <- 0
+
+# requires_license	3
+td$requires_license[is.na(td$requires_license)] <- 0
+
+# WholePlace	3
+# PrivateRoom	3
+# SharedRoom	3
+td$PrivateRoom[is.na(td$PrivateRoom)] <- 1
+
+# verifs_vLow	3
+# verifs_Med	3
+# verifs_High	3
+# verifs_VHigh	3
+td$verifs_Med[is.na(td$verifs_Med)] <- 1
+
+# secDep0	3
+# secDepGen	3
+# secDepHigh	3
+td$secDepGen[is.na(td$secDepGen)] <- 1
+
+# vlow_pPG	3
+# low_pPG	3
+# med_pPG	3
+# high_pPG	3
+# vHigh_pPG	3
+td$vlow_pPG[is.na(td$vlow_pPG)] <- 1
+
+# minNigh1	3
+# minNigh2	3
+# minNigh3	3
+# minNight_Excess	3
+td$minNigh2[is.na(td$minNigh2)] <- 1
+
+# accommodates	2
+td$accommodates[is.na(td$accommodates)] <- 1
+
+# availability_30	2
+td$availability_30[is.na(td$availability_30)] <- 3
+
+# availability_365	2
+td$availability_365[is.na(td$availability_365)] <- 16
+
+# availability_60	2
+td$availability_60[is.na(td$availability_60)] <- 6
+
+# availability_90	2
+td$availability_90[is.na(td$availability_90)] <- 1
+
+# extra_people	2
+td$extra_people[is.na(td$extra_people)] <- 3
+
+# instant_bookable	2
+td$instant_bookable[is.na(td$instant_bookable)] <- 1
+
+# In_NAS	2
+# In_LA	2
+# In_SD	2
+# In_WDC	2
+# In_NWO	2
+# In_SFO	2
+# In_NYC	2
+# In_SEA	2
+# In_CHI	2
+# In_BOS	2
+# In_AUS	2
+# In_PO	2
+# In_DEN	2
+# In_SCU	2
+# In_OAK	2
+# In_ASH	2
+td$In_LA[is.na(td$In_LA)] <- 1
+
+# CancelPol_Mod	2
+# CancelPol_Flexy	2
+td$CancelPol_Flexy[is.na(td$CancelPol_Flexy)] <- 1
+
+# bed_Real	2
+td$bed_Real[is.na(td$bed_Real)] <- 1
+
+# vlowAmens	2
+td$medAmens[is.na(td$medAmens)] <- 1
+# lowAmens	2
+# medAmens	2
+# highAmens	2
+# vhighAmens	2
+
+td <- td %>% replace(is.na(.), 0)
+View(colSums(is.na(td)))
+```
+
+```{r}
+
+library(glmnet)
+library(caTools)
+
+df_y$high_booking_rate <- replace_na(df_y$high_booking_rate, 0)
+
+dfs <- scale(df)
+
+dfs <- data.frame(dfs, df_y$high_booking_rate)
+
+set.seed(71923)
+
+##select random instances from the total data, and hold out 30% as validation data
+train_insts = sample(nrow(dfs), .7*nrow(dfs))
+train1 <- dfs[train_insts,]
+test1 <- dfs[-train_insts,]
+
+logMod <- glm(df_y.high_booking_rate~., data = train1, family = "binomial")
+
+actuals <- test1$df_y.high_booking_rate
+
+# Predict test
+cutoff=0.5
+trainTestPreds <- predict(logMod, newdata = test1[,-111], type = 'response')
+trainTestClass <- ifelse(trainTestPreds>=cutoff, 1, 0)
+table(actuals, trainTestClass)
+
+# For c = 0.4 # 79.43%
+# log_test_class
+# actuals     0     1
+#       0 19279  3140
+#       1  3036  4545
+
+# For c = 0.5 # 80.1%
+# log_test_class
+# actuals     0     1
+#       0 20534  1885
+#       1  4069  3512
+
+# For c = 0.45 # 79.9%
+#  log_test_class
+# actuals     0     1
+#       0 19961  2458
+#       1  3580  4001
+
+# For c = 5.5 # 80.06%
+#  log_test_class
+# actuals     0     1
+#       0 21027  1392
+#       1  4589  2992
+
+```
+
+Applying Logistic Model for predicting test data 
+
+```{r}
+
+library(glmnet)
+library(caTools)
+
+df_y$high_booking_rate <- replace_na(df_y$high_booking_rate, 0)
+
+dfs1 <- scale(df)
+td1 <- scale(td)
+td1 <- as.data.frame(td1)
+
+dfs1 <- data.frame(dfs1, df_y$high_booking_rate)
+
+
+logModFull <- glm(as.factor(df_y.high_booking_rate)~., data = dfs1, family = "binomial")
+
+# actuals <- test1$df_y.high_booking_rate
+
+# Predict test
+cutoff=0.5
+test_preds <- predict(logModFull, newdata = td1, type = 'response')
+log_test_classfn <- ifelse(test_preds>=cutoff, 1, 0)
+table(log_test_classfn)
+
+# log_test_classfn
+#     0     1 
+# 10074  2134 
+
+
+```
+
+Naive Bayes
+
+```{r}
+library(e1071)
+nb_classifier = naiveBayes(as.factor(df_y.high_booking_rate) ~ ., data = train1)
+
+# Predicting the Test set results
+nb_pred = predict(nb_classifier, newdata = test1[,-111])
+
+table(actuals, nb_pred)
+#        nb_pred # 68.1%
+# actuals     0     1
+#       0 14429  7990
+#       1  1572  6009
+```
+
+
+RandomForest
+
+```{r}
+# Fitting Random Forest Classification to the Training set
+# install.packages('randomForest')
+library(randomForest)
+set.seed(123)
+df_y$high_booking_rate <- as.factor(df_y$high_booking_rate)
+
+rfdf = data.frame(df, df_y$high_booking_rate)
+
+train_insts = sample(nrow(rfdf), .7*nrow(rfdf))
+rf_train <- rfdf[train_insts,]
+rf_test <- rfdf[-train_insts,]
+
+
+rf_classifier = randomForest(x = rf_train[,-111],
+                          y = rf_train$df_y.high_booking_rate,
+                          ntree = 800)
+model <- train(df_y.high_booking_rate~., )
+
+# Predicting the Test set results
+rf_pred = predict(rf_classifier, newdata = rf_test[,-111])
+
+# Table
+table(rf_pred, rf_test$df_y.high_booking_rate) # 82.4%
+
+# ntrees Acc
+# 300 82.56667%
+# 700 83.06129%
+# 1000 82.53%
+
+```
+
+XGBoost
+
+```{r}
+library(xgboost)
+
+df_y$high_booking_rate <- replace_na(df_y$high_booking_rate, 0)
+
+set.seed(12345)
+
+df_xg <- data.frame(df, df_y$high_booking_rate)
+##select random instances from the total data, and hold out 30% as validation data
+train_insts = sample(nrow(df_xg), .7*nrow(df_xg))
+xg_train <- df_xg[train_insts,]
+xg_test <- df_xg[-train_insts,]
+
+xg_classifier = xgboost(data = as.matrix(xg_train[,-111]), label = xg_train$df_y.high_booking_rate, nrounds = 210)
+
+xgtt_pred = predict(xg_classifier, newdata = as.matrix(xg_test[,-111]))
+xgtt_pred = (xgtt_pred >= 0.5)*1
+
+table(xg_test$df_y.high_booking_rate, xgtt_pred)
+
+# xgtt_pred #nrounds = 220; 83.04667%
+#         0     1
+#   0 20587  1921
+#   1  3165  4327
+
+# xgtt_pred #nrounds = 210; 83.09%
+#         0     1
+#   0 20592  1916
+#   1  3156  4336
+```
+
+Cross Validation (XGBoost)
+
+```{r}
+
+library(caret)
+
+params = list(eta = 0.1, subsample = 0.75, max_depth = 8, gamma = 0.1, min_child_width = 1)
+
+folds = createFolds(df_xg$df_y.high_booking_rate, k = 15)
+cv = lapply(folds, function(x) {
+  training_fold = df_xg[-x, ]
+  test_fold = df_xg[x, ]
+  classifier = xgboost(data = as.matrix(training_fold[,-111]), label = training_fold$df_y.high_booking_rate, nrounds = 210, params = params)
+  y_pred = predict(classifier, newdata = as.matrix(test_fold[,-111]))
+  y_pred = (y_pred >= 0.5)
+  cm = table(test_fold[, 111], y_pred)
+  accuracy = (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] + cm[1,2] + cm[2,1])
+  return(accuracy)
+})
+accuracy = mean(as.numeric(cv))
+accuracy
+
+# Train split; nrounds = 100; k = 10; Avg Acc =  82.86%
+# Train split; nrounds = 100; k = 30; Avg Acc = 83.03% 
+# Full training set; nrounds = 100; k = 10; Avg Acc = 83.01%
+# Full training set; nrounds = 210; k = 30; Avg Acc = 83.19%/83.267%
+# Full training set; nrounds = 200; k = 15; Avg Acc = 83.22399
+# Full training set; nrounds = 220; k = 15; Avg acc = 83.15901
+# Full training set; nrounds = 210; k = 15; With tuned params; Avg acc = 81.9
+# Full training set; nrounds = 210; k = 15; With tuned params; Avg acc = 82.5
+# Full training set; nrounds = 210; k = 15; eta = 0.1, subsample = 0.75, max_depth = 6, gamma = 0.1, min_child_width = 10; Avg Acc = 83.2%
+# Full training set; nrounds = 210; k = 15; eta = 0.1, subsample = 0.75, max_depth = 8, gamma = 0.1, min_child_width = 10; Avg Acc = 83.365%
+# Full training set; nrounds = 210; k = 15; eta = 0.1; subsample = 0.75; max_depth = 8; gamma = 0.1; min_child_width = 1; Avg acc = 83.453%
+# Full training set; nrounds = 210; k = 15; eta = 0.1; subsample = 0.75; max_depth = 6; gamma = 0.1; min_child_width = 1; Avg acc = 83.175%
+```
+
+
+XGBoost Tuned
+
+```{r}
+install.packages('xgboost')
+library(xgboost)
+xgdf = data.frame(df, df_y$high_booking_rate)
+
+# eta = 0.1; subsample = 0.75; max_depth = 8; gamma = 0.1; min_child_width = 1
+# params = list(eta = 0.1, subsample = 0.75, max_depth = 6, gamma = 0.1, min_child_width = 1)
+
+params = list(eta = 0.1, subsample = 0.75, max_depth = 8, gamma = 0.1, min_child_width = 1)
+
+xg_classifier = xgboost(data = as.matrix(xgdf[,-111]), label = xgdf$df_y.high_booking_rate, nrounds = 210, params = params)
+
+xg_pred = predict(xg_classifier, newdata = as.matrix(tdf[,fset]))
+xg_pred = (xg_pred >= 0.5)
+
+table(xg_pred)
+
+xg_pred = xg_pred*1
+```

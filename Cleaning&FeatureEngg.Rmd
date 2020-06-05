@@ -1,0 +1,1805 @@
+---
+title: "Cleaning & Feature Engineering"
+author: "Sahitya"
+date: "29/04/2020"
+output: html_document
+---
+
+
+```{r}
+library(caret)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(lubridate)
+library(tidyr)
+#library(rapportools)
+```
+
+Loading the train data
+
+```{r}
+# Load train data - Replace blank cells with NA
+df_x_main <- read.csv('airbnb_train_x.csv', na.strings = c("", "NA"))
+df_y <- read.csv('airbnb_train_y.csv', na.strings = c("", "NA"))
+df_x <- df_x_main
+```
+
+Loading the test data
+
+```{r}
+tdf_x_main <- read.csv('airbnb_test_x.csv', na.strings = c("", "NA"))
+tdf <- tdf_x_main
+```
+
+
+Check for missingness
+
+```{r}
+# Check for missingness
+colSums(is.na(df_x))
+```
+
+There are a lot of columns with missing data but it's easier to understand using proportions
+
+```{r, fig.width=10,fig.height=10}
+
+# missing.values <- df_x_main %>%
+#   gather(key = "key", value = "val") %>%
+#   mutate(isna = is.na(val)) %>%
+#   group_by(key) %>%
+#   mutate(total = n()) %>%
+#   group_by(key, total, isna) %>%
+#   summarise(num.isna = n()) %>%
+#   mutate(pct = num.isna / total * 100)
+# 
+# 
+# levels <-
+#     (missing.values  %>% filter(isna == T) %>% arrange(desc(pct)))$key
+# 
+# percentage.plot <- missing.values %>%
+#       ggplot() +
+#         geom_bar(aes(x = reorder(key, desc(pct)),
+#                      y = pct, fill=isna),
+#                  stat = 'identity', alpha=0.8) +
+#       scale_x_discrete(limits = levels) +
+#       scale_fill_manual(name = "",
+#                         values = c('steelblue', 'tomato3'), labels = c("Present", "Missing")) +
+#       coord_flip() +
+#       labs(title = "Percentage of missing values", x =
+#              'Variable', y = "% of missing values")
+# 
+# percentage.plot
+
+```
+
+We can also see how the rows are -
+
+```{r, fig.width=10,fig.height=10}
+# row.plot <- df_x %>%
+#   mutate(id = row_number()) %>%
+#   gather(-id, key = "key", value = "val") %>%
+#   mutate(isna = is.na(val)) %>%
+#   ggplot(aes(key, id, fill = isna)) +
+#     geom_raster(alpha=0.8) +
+#     scale_fill_manual(name = "",
+#         values = c('steelblue', 'tomato3'),
+#         labels = c("Present", "Missing")) +
+#     scale_x_discrete(limits = levels) +
+#     labs(x = "Variable",
+#            y = "Row Number", title = "Missing values in rows") +
+#     coord_flip()
+# 
+# row.plot
+```
+
+In dealing with the missingness, let's first create missingness indicators for all the variables. For this, we can define a function. We shall use this once we are sure we've made a fair amount of cleaning to most of the columns.
+
+```{r}
+appendNAs <- function(dataset, cols) {
+  append_these = data.frame( is.na(dataset[, cols] ))
+  names(append_these) = paste(names(append_these), "NA", sep = "_")
+  dataset = cbind(dataset, append_these)
+  dataset[is.na(dataset)] = -1
+  return(dataset)
+}
+```
+
+A glimpse at the structure of the data
+
+```{r}
+glimpse(df_x)
+```
+
+Inspect the columns that have numeric data -
+
+1	accommodates	Factor
+2	availability_30	Factor
+3	availability_365	int
+4	availability_60	Factor
+5	availability_90	Factor
+6	bathrooms	Factor
+7	bedrooms	Factor
+8	beds	Factor
+9	cleaning_fee	Factor - (needs to be cleaned - has $ symbol like $250.00)
+10	extra_people	Factor - (needs to be cleaned - has $ symbol like $250.00)
+11	guests_included	num
+12	host_acceptance_rate	Factor - (needs to be cleaned - has format like so - 100%)
+13	host_listings_count	Factor
+14	host_response_rate	Factor - (needs to be cleaned - has format like so - 100%)
+15	host_total_listings_count	Factor
+16	latitude	Factor
+17	longitude	Factor
+18	maximum_nights	num
+19	minimum_nights	int
+20	monthly_price	Factor - (needs to be cleaned - has $ symbol like $250.00)
+21	price	Factor - (needs to be cleaned - has $ symbol like $250.00)
+22	security_deposit	Factor - (needs to be cleaned - has $ symbol like $250.00)
+23	square_feet	int 
+24	weekly_price	Factor - (needs to be cleaned - has $ symbol like $250.00)
+
+First let's explore the columns with the $ symbols and commas and percentages -
+
+```{r, fig.width=10,fig.height=150}
+
+dollar_num_cols = c("cleaning_fee", "extra_people", "monthly_price", "price", "security_deposit", "weekly_price")
+perc_num_cols = c("host_acceptance_rate", "host_response_rate")
+
+# The columns which have prices
+qplot(cleaning_fee, data = df_x) + coord_flip()
+qplot(extra_people, data = df_x) + coord_flip()
+qplot(monthly_price, data = df_x) + coord_flip()
+qplot(price, data = df_x) + coord_flip()
+qplot(security_deposit, data = df_x) + coord_flip()
+qplot(weekly_price, data = df_x) + coord_flip()
+
+# Observations
+
+# cleaning_fee
+# - Majority of NAs
+# - Has a few f and t
+
+# extra_people
+# - has some longitude/latitude information -
+# - 40.7115296729, 37.7172817854, 34.0550373047, 34.0544381605, 34.04703657, 34.0305066944, 33.9847962097, 33.7751358179, 30.3646152573
+
+# price
+# -looks fine except for a very small number of NAs
+
+# security_deposit
+# mostly NAs
+# second most popular category is $0.00
+
+# weekly_price
+# - looks fine
+# - mostly NAs
+
+# monthly_price
+# - NA is the most popular - there are lots
+# - other values are mostly 4 digits or more with very few 3 digits
+
+# The columns which have %
+qplot(host_acceptance_rate, data = df_x) + coord_flip()
+qplot(host_response_rate, data = df_x) + coord_flip()
+
+# host_acceptance_rate
+# - most popular category - NA
+# - all others are within format
+
+# host_response_rate
+# - 100% is most popular
+# - Next is NA
+# - There are 4 out of place categories - Apartment, Loft, House, Condominium
+
+```
+
+Storing the discrepancies in a variable for later use -
+
+```{r}
+extra_people_discrepancies = c(40.7115296729, 37.7172817854, 34.0550373047, 34.0544381605, 34.04703657, 34.0305066944, 33.9847962097, 33.7751358179, 30.3646152573)
+hostresponserate_discrepancies = c("Apartment", "Loft", "House", "Condominium")
+```
+
+```{r}
+df_x[df_x$extra_people %in% extra_people_discrepancies,]
+```
+
+All the columns seem to be misplaced. We can store this separately and rearrange them -
+
+```{r}
+misplacedX <- c(16246, 30584, 47615, 56281, 65792, 72540, 75208, 92585, 96068)
+
+misplaced_df_x <- df_x[df_x$extra_people %in% extra_people_discrepancies,]
+df_x[df_x$extra_people %in% extra_people_discrepancies, 3:70] <- NA
+df_x[df_x$X %in% misplacedX, ]
+```
+
+Now we can work on transforming the data -
+
+```{r}
+# First, the columns which have prices -
+
+# cleaning_fee, extra_people, price, security_deposit, weekly_price, monthly_price
+
+df_x$cleaning_fee <- as.numeric(str_replace_all(df_x$cleaning_fee, "[\\$,]", ""))
+  # test data
+tdf$cleaning_fee <- as.numeric(str_replace_all(tdf$cleaning_fee, "[\\$,]", ""))
+
+df_x$extra_people <- as.numeric(str_replace_all(df_x$extra_people, "[\\$,]", ""))
+  # test data
+tdf$extra_people <- as.numeric(str_replace_all(tdf$extra_people, "[\\$,]", ""))
+
+df_x$price <- as.numeric(str_replace_all(df_x$price, "[\\$,]", ""))
+  # test data
+tdf$price <- as.numeric(str_replace_all(tdf$price, "[\\$,]", ""))
+
+df_x$security_deposit <- as.numeric(str_replace_all(df_x$security_deposit, "[\\$,]", ""))
+  # test data
+tdf$security_deposit <- as.numeric(str_replace_all(tdf$security_deposit, "[\\$,]", ""))
+
+df_x$weekly_price <- as.numeric(str_replace_all(df_x$weekly_price, "[\\$,]", ""))
+  # test data
+tdf$weekly_price <- as.numeric(str_replace_all(tdf$weekly_price, "[\\$,]", ""))
+
+df_x$monthly_price <- as.numeric(str_replace_all(df_x$monthly_price, "[\\$,]", ""))
+  # test data
+tdf$monthly_price <- as.numeric(str_replace_all(tdf$monthly_price, "[\\$,]", ""))
+
+# Next, the columns which havedf_x$host_acceptance_rate - has %
+
+# host_acceptance_rate, host_response_rate
+
+df_x$host_acceptance_rate <- as.numeric(str_replace_all(df_x$host_acceptance_rate, "%", ""))
+  # test data
+tdf$host_acceptance_rate <- as.numeric(str_replace_all(tdf$host_acceptance_rate, "%", ""))
+
+df_x$host_response_rate <- as.numeric(str_replace_all(df_x$host_response_rate, "%", ""))
+  # test data
+tdf$host_response_rate <- as.numeric(str_replace_all(tdf$host_response_rate, "%", ""))
+
+```
+
+The other columns now -
+
+1	accommodates	Factor
+2	availability_30	Factor
+3	availability_365	int
+4	availability_60	Factor
+5	availability_90	Factor
+6	bathrooms	Factor
+7	bedrooms	Factor
+8	beds	Factor
+#  9	cleaning_fee	Factor - (needs to be cleaned - has $ symbol like $250.00)
+#  10	extra_people	Factor - (needs to be cleaned - has $ symbol like $250.00)
+11	guests_included	num
+#  12	host_acceptance_rate	Factor - (needs to be cleaned - has format like so - 100%)
+13	host_listings_count	Factor
+#  14	host_response_rate	Factor - (needs to be cleaned - has format like so - 100%)
+15	host_total_listings_count	Factor
+16	latitude	Factor
+17	longitude	Factor
+18	maximum_nights	num
+19	minimum_nights	int
+#  20	monthly_price	Factor - (needs to be cleaned - has $ symbol like $250.00)
+#  21	price	Factor - (needs to be cleaned - has $ symbol like $250.00)
+#  22	security_deposit	Factor - (needs to be cleaned - has $ symbol like $250.00)
+23	square_feet	int 
+#  24	weekly_price	Factor - (needs to be cleaned - has $ symbol like $250.00)
+
+```{r}
+qplot(as.numeric(accommodates), data = df_x)
+qplot(as.numeric(availability_30), data = df_x)
+qplot(as.numeric(availability_365), data = df_x)
+qplot(as.numeric(availability_60), data = df_x) + coord_flip()
+qplot(as.numeric(availability_90), data = df_x) + coord_flip()
+qplot(as.numeric(bathrooms), data = df_x) + coord_flip()
+qplot(as.numeric(bedrooms), data = df_x)
+qplot(as.numeric(beds), data = df_x)
+qplot(as.numeric(guests_included), data = df_x) + coord_flip()
+qplot(as.numeric(host_listings_count), data = df_x) + coord_flip()
+qplot(as.numeric(host_total_listings_count), data = df_x) + coord_flip()
+# qplot(longitude, data = df_x)
+# qplot(latitude, data = df_x)
+qplot(as.numeric(maximum_nights), data = df_x)
+qplot(as.numeric(minimum_nights), data = df_x)
+qplot(as.numeric(square_feet), data = df_x)
+```
+
+Visualize in log scale -
+
+```{r}
+
+qplot(as.numeric(accommodates), data = df_x) + scale_x_log10()
+qplot(as.numeric(availability_30), data = df_x) + scale_x_log10()
+qplot(as.numeric(availability_365), data = df_x) + scale_x_log10()
+qplot(as.numeric(availability_60), data = df_x) + coord_flip() + scale_x_log10()
+qplot(as.numeric(availability_90), data = df_x) + coord_flip() + scale_x_log10()
+qplot(as.numeric(bathrooms), data = df_x) + coord_flip() + scale_x_log10()
+qplot(as.numeric(bedrooms), data = df_x) + scale_x_log10()
+qplot(as.numeric(beds), data = df_x) + scale_x_log10()
+qplot(as.numeric(guests_included), data = df_x) + coord_flip() + scale_x_log10()
+qplot(as.numeric(host_listings_count), data = df_x) + coord_flip() + scale_x_log10()
+qplot(as.numeric(host_total_listings_count), data = df_x) + coord_flip() + scale_x_log10()
+# qplot(longitude, data = df_x)
+# qplot(latitude, data = df_x)
+qplot(as.numeric(maximum_nights), data = df_x) + scale_x_log10()
+qplot(as.numeric(minimum_nights), data = df_x) + scale_x_log10()
+qplot(as.numeric(square_feet), data = df_x) + scale_x_log10()
+
+
+```
+
+Convert these columns to numeric
+
+```{r}
+
+num_cols <- c("accommodates", "availability_30", "availability_365", "availability_60", 
+              "availability_90", "bathrooms", "bedrooms", "beds", "guests_included", 
+              "host_listings_count", "host_total_listings_count", 
+              "maximum_nights", "minimum_nights", "square_feet")
+
+geo_cols <- c("latitude", "longitude")
+
+df_x[,num_cols] <- sapply(df_x[,num_cols],as.numeric)
+  # test data
+tdf[,num_cols] <- sapply(tdf[,num_cols],as.numeric)
+
+df_x[,geo_cols] <- sapply(df_x[,geo_cols],as.character)
+df_x[,geo_cols] <- sapply(df_x[,geo_cols],as.numeric)
+  # test data
+tdf[,geo_cols] <- sapply(tdf[,geo_cols],as.character)
+tdf[,geo_cols] <- sapply(tdf[,geo_cols],as.numeric)
+
+```
+
+Observations for these variables -
+
+
+1. availability_30
+- Mostly 0s
+- There is f and t but negligible
+
+2. availability_365
+- Looks good
+- Can be visualized in a log scale 
+
+3. availability_60
+- Unclear
+- Need to look at the table
+- Few values which are like so - "Santa Monica, California, United States" - Might have to find the rows where the data is shuffled like this
+
+4. availability_90
+- Unclear
+- Need to look at the table
+- Few values which are names I guess, like 'Amanda', 'Winni'
+
+5. Bathrooms
+- Mostly 1
+- Has some names like 'Oceanview', 'North Shoal Creek', 'Long Beach'
+
+6. Bedrooms 
+- Decent - mostly 1
+- has some values like - 'within an hour'
+
+7. guests_included
+- There is a negative scale in the graph - need to find out what this is about
+- Otherwise, mostly 0
+
+8. accommodates
+- All good except for one t
+
+9. host_listings_count
+- Have to see in a table
+
+10. maximum_nights
+- Have to see in a table
+
+11. minimum_nights 
+- Have to see in a table
+
+12. latitude, longitude
+- Have to see in a table
+
+
+```{r, fig.height=10, fig.width=30}
+ggplot(gather(df_x[, num_cols]), aes(value)) + 
+    geom_histogram(stat = "count") + 
+    facet_wrap(~key, scales = 'free_x')
+```
+
+Now a look at categorical variables -
+
+# 1	bed_type	Factor
+# 2	cancellation_policy	Factor
+# 3	city	Factor
+# 4	city_name	Factor
+# 5	country	Factor
+# 6	country_code	Factor
+# 7	experiences_offered	Factor
+8	host_has_profile_pic	Factor
+9	host_identity_verified	Factor
+10	host_is_superhost	Factor
+# 11	host_location	Factor
+# 12	host_neighbourhood	Factor
+# 13	host_response_time	Factor
+14	instant_bookable	Factor
+15	is_business_travel_ready	Factor
+16	is_location_exact	Factor
+# 17	jurisdiction_names	Factor
+# 18	license	Factor
+# 19	market	Factor
+# 20	neighbourhood	Factor
+# 21	property_type	Factor
+22	require_guest_phone_verification	Factor
+23	require_guest_profile_picture	Factor
+24	requires_license	Factor
+# 25	room_type	Factor
+# 26	smart_location	Factor
+# 27	state	Factor
+
+There are a bunch of columns which have 't' and 'f'
+
+1. df$host_has_profile_pic - factor
+2. df$host_identity_verified - factor
+3. df$host_is_superhost - factor
+4. df$instant_bookable - factor
+5. df$is_business_travel_ready - factor
+6. df$is_location_exact - factor
+7. df$require_guest_phone_verification - factor
+8. df$require_guest_profile_picture - factor
+9. df$requires_license - factor
+
+First, histograms.
+
+```{r echo=FALSE}
+qplot(x = host_has_profile_pic, data = df_x) 
+qplot(x = host_identity_verified, data = df_x)
+qplot(x = host_is_superhost, data = df_x) + coord_flip()
+qplot(x = instant_bookable, data = df_x)
+qplot(x = is_business_travel_ready, data = df_x) 
+qplot(x = is_location_exact, data = df_x)
+qplot(x = require_guest_phone_verification, data = df_x)
+qplot(x = require_guest_profile_picture, data = df_x)
+qplot(x = requires_license, data = df_x)
+```
+
+These columns seem to comprise mostly of 'f's and 't's.
+
+We need to figure out how to deal with this specific column since more than 45% of the values are missing. We'll get to that but first, let's take care of the other columns. 
+
+```{r}
+# View(table(tdf$host_has_profile_pic))
+# View(table(tdf$host_identity_verified))
+# View(table(tdf$host_is_superhost))
+# View(table(tdf$instant_bookable))
+# View(table(tdf$is_business_travel_ready))
+# View(table(tdf$is_location_exact))
+# View(table(tdf$require_guest_phone_verification))
+# View(table(tdf$require_guest_profile_picture))
+# View(table(tdf$requires_license))
+```
+
+Let's fix the discrepancies in the test data
+
+```{r}
+superhost_discrepancies <- c("Bed,Bath&Bike in Sunny Santa Monica", "Pristine Mid-Century Modern w 180Â° Canyon View!")
+
+misplacedy <- c(775, 10274)
+
+misplaced_tdf <- tdf[tdf$host_is_superhost %in% superhost_discrepancies, ]
+
+tdf[tdf$host_is_superhost %in% superhost_discrepancies, 3:70] <- NA
+
+tdf[tdf$X %in% misplacedy, ]
+```
+
+Convert t's and f's to 1s and 0s
+
+```{r}
+# 1. df$host_has_profile_pic - factor
+df_x$host_has_profile_pic <- ifelse(df_x_main$host_has_profile_pic == "t", 1, 0)
+qplot(x = host_has_profile_pic, data = df_x)
+  # test data
+tdf$host_has_profile_pic <- ifelse(tdf_x_main$host_has_profile_pic == "t", 1, 0)
+
+# 2. df$host_identity_verified - factor
+df_x$host_identity_verified <- ifelse(df_x_main$host_identity_verified == "t", 1, 0)
+qplot(x = host_identity_verified, data = df_x)
+  # test data
+tdf$host_identity_verified <- ifelse(tdf_x_main$host_identity_verified == "t", 1, 0)
+
+# 3. df$host_is_superhost - factor
+df_x$host_is_superhost <- ifelse(df_x_main$host_is_superhost== "t", 1, 0)
+qplot(x = host_is_superhost, data = df_x)
+  # test data
+tdf$host_is_superhost <- ifelse(tdf_x_main$host_is_superhost== "t", 1, 0)
+
+# 4. df$instant_bookable - factor
+df_x$instant_bookable <- ifelse(df_x_main$instant_bookable == "t", 1, 0)
+qplot(x = instant_bookable, data = df_x)
+  # test data
+tdf$instant_bookable <- ifelse(tdf_x_main$instant_bookable == "t", 1, 0)  
+
+# 5. df$is_business_travel_ready - factor
+df_x$is_business_travel_ready <- ifelse(is.na(df_x_main$is_business_travel_ready), df_x_main$is_business_travel_ready, ifelse(df_x_main$is_business_travel_ready == "t", 1, 0))
+qplot(x = is_business_travel_ready, data = df_x)
+  # test data
+tdf$is_business_travel_ready <- ifelse(is.na(tdf_x_main$is_business_travel_ready), tdf_x_main$is_business_travel_ready, ifelse(tdf_x_main$is_business_travel_ready == "t", 1, 0))
+
+# 6. df$is_location_exact - factor
+df_x$is_location_exact <- ifelse(df_x_main$is_location_exact == "t", 1, 0)
+qplot(x = is_location_exact, data = df_x)
+  # test data
+tdf$is_location_exact <- ifelse(tdf_x_main$is_location_exact == "t", 1, 0)
+
+# 7. df$require_guest_phone_verification - factor
+df_x$require_guest_phone_verification <- ifelse(df_x_main$require_guest_phone_verification == "t", 1, 0)
+qplot(x = require_guest_phone_verification, data = df_x)
+  # test data
+tdf$require_guest_phone_verification <- ifelse(tdf_x_main$require_guest_phone_verification == "t", 1, 0)
+
+# 8. df$require_guest_profile_picture - factor
+df_x$require_guest_profile_picture <- ifelse(df_x_main$require_guest_profile_picture == "t", 1, 0)
+qplot(x = require_guest_profile_picture, data = df_x)
+  # test data
+tdf$require_guest_profile_picture <- ifelse(tdf_x_main$require_guest_profile_picture == "t", 1, 0)
+
+# 9. df$requires_license - factor
+df_x$requires_license <- ifelse(df_x_main$requires_license == "t", 1, 0)
+qplot(x = requires_license, data = df_x)
+  # test data
+tdf$requires_license <- ifelse(tdf_x_main$requires_license == "t", 1, 0)
+
+```
+
+Moving on to other categorical variables -
+
+1	bed_type	Factor
+2	cancellation_policy	Factor
+3	city	Factor
+4	city_name	Factor
+5	country	Factor
+6	country_code	Factor
+7	experiences_offered	Factor
+# 8	host_has_profile_pic	Factor
+# 9	host_identity_verified	Factor
+# 10	host_is_superhost	Factor
+11	host_location	Factor
+12	host_neighbourhood	Factor
+13	host_response_time	Factor
+# 14	instant_bookable	Factor
+# 15	is_business_travel_ready	Factor
+# 16	is_location_exact	Factor
+17	jurisdiction_names	Factor
+18	license	Factor
+19	market	Factor
+20	neighbourhood	Factor
+21	property_type	Factor
+# 22	require_guest_phone_verification	Factor
+# 23	require_guest_profile_picture	Factor
+# 24	requires_license	Factor
+25	room_type	Factor
+26	smart_location	Factor
+27	state	Factor
+
+```{r, fig.height=15, fig.width=10}
+qplot(df_x$bed_type) + coord_flip()
+qplot(df_x$cancellation_policy) + coord_flip()
+qplot(df_x$city) + coord_flip() # unclear - need to look at the table
+qplot(df_x$city_name) + coord_flip()
+qplot(df_x$country)+ coord_flip()
+qplot(df_x$country_code)+ coord_flip()
+qplot(df_x$experiences_offered)+ coord_flip()
+qplot(df_x$host_location)+ coord_flip() # Unclear - need to look at the table
+qplot(df_x$host_neighbourhood)+ coord_flip() # Unclear - need to look at the table
+qplot(df_x$host_response_time)+ coord_flip()
+qplot(df_x$jurisdiction_names)+ coord_flip() # Categorical list
+qplot(df_x$license)+ coord_flip() # Unclear - need to look at the table
+qplot(df_x$market)+ coord_flip() # Looks clean for the most part
+qplot(df_x$neighbourhood)+ coord_flip() # Unclear - need to look at the table
+qplot(df_x$property_type)+ coord_flip() # Looks neat for the most part
+qplot(df_x$room_type)+ coord_flip() # clean
+qplot(df_x$smart_location)+ coord_flip() # Unclear - need to look at the table
+qplot(df_x$state)+ coord_flip() # needs to be cleaned
+```
+
+Table views for the variables with unclear plots -
+
+```{r}
+# View(table(df_x$city)) # 738 categories
+# View(table(df_x$host_location)) # 2154 categories; Format like so - Liverpool, England, United Kingdom
+# View(table(df_x$host_neighbourhood)) # 1303 categories
+# View(table(df_x$license)) # Looks like some unique ID - 7474 many categories
+# View(table(df_x$neighbourhood)) # 1093 categories; Examples - Woodside, Windsor
+# View(table(df_x$smart_location)) # 750 categories - Can be cleaned by converting all to upper case
+```
+
+First, let's clean the state column -
+
+```{r}
+library(rapportools) # for trim.space
+
+# View with all values in upper case
+
+View(table(str_to_upper(df_x$state)))
+
+# The data discrepancies are -
+
+# 1. BAJA CALIFORNIA
+# 2. NEW YORK
+# 3. SECC TERRAZAS
+# 4. MP
+
+# Let's change that 
+
+df_x$state <- trim.space(str_to_upper(df_x$state))
+
+df_x$state[df_x$state == 'NEW YORK'] <- 'NY'
+df_x$state[df_x$state == 'BAJA CALIFORNIA'] <- 'CA'
+df_x$state[df_x$state == 'SECC TERRAZAS'] <- 'CA'
+df_x$state[df_x$state == 'MP'] <- 'NY'
+
+# There are only 17 samples for MD which can be changed to DC
+# There are only 2 samples for NJ which can be changed to NY
+
+df_x$state[df_x$state == 'MD'] <- 'DC'
+df_x$state[df_x$state == 'NJ'] <- 'NY'
+
+# There is a separate column for LA which can be changed to CA
+
+df_x$state[df_x$state == 'LA'] <- 'CA'
+unique(df_x$state)
+  # test data
+
+tdf$state <- trim.space(str_to_upper(tdf$state))
+View(table(tdf$state))
+
+tdf$state[tdf$state == 'LA'] <- 'CA'
+tdf$state[tdf$state == 'MD'] <- 'DC'
+
+unique(tdf$state)
+```
+
+```{r}
+# View(sort(table(tdf$city), decreasing = T)) 
+# View(table(tdf$host_location)) 
+# View(table(tdf$host_neighbourhood)) 
+# View(table(tdf$license)) 
+# View(table(tdf$neighbourhood)) 
+# View(table(tdf$smart_location)) 
+```
+
+They are pretty much okay.
+
+Let's capitalize and trim these categorical columns -
+
+```{r}
+
+# city
+df_x$city <- trim.space(str_to_upper(df_x$city))
+  # test data
+tdf$city <- trim.space(str_to_upper(tdf$city))
+
+# city_name
+df_x$city_name <- trim.space(str_to_upper(df_x$city_name))
+  # test data
+tdf$city_name <- trim.space(str_to_upper(tdf$city_name))
+
+# host_location
+df_x$host_location <- trim.space(str_to_upper(df_x$host_location))
+  # test data
+tdf$host_location <- trim.space(str_to_upper(tdf$host_location))
+
+# host_neighborhood
+df_x$host_neighbourhood <- trim.space(str_to_upper(df_x$host_neighbourhood))
+  # test data
+tdf$host_neighbourhood <- trim.space(str_to_upper(tdf$host_neighbourhood))
+
+# neighborhood
+df_x$neighbourhood <- trim.space(str_to_upper(df_x$neighbourhood))
+  # test data
+tdf$neighbourhood <- trim.space(str_to_upper(tdf$neighbourhood))
+
+# smart_location
+df_x$smart_location <- trim.space(str_to_upper(df_x$smart_location))
+  # test data
+tdf$smart_location <- trim.space(str_to_upper(tdf$smart_location)) 
+
+```
+
+Now let's view the number of categories for each of these variables and see if they have reduced -
+
+```{r}
+length(unique(df_x_main$city)) # 739
+length(unique(df_x$city)) # 526
+length(unique(df_x_main$host_location)) # 2155
+length(unique(df_x$host_location)) # 2118
+length(unique(df_x_main$host_neighbourhood)) # 1304
+length(unique(df_x$host_neighbourhood)) # 1295
+length(unique(df_x_main$neighborhood)) # 62392
+length(unique(df_x$neighborhood)) # 62392
+length(unique(df_x_main$smart_location)) # 751
+length(unique(df_x$smart_location)) # 634
+```
+
+The test data -
+
+```{r}
+length(unique(tdf_x_main$city)) # 265
+length(unique(tdf$city)) # 221
+length(unique(tdf_x_main$host_location)) # 600
+length(unique(tdf$host_location)) # 593
+length(unique(tdf_x_main$host_neighbourhood)) # 879
+length(unique(tdf$host_neighbourhood)) # 877
+length(unique(tdf_x_main$neighborhood)) # 8194
+length(unique(tdf$neighborhood)) # 8194
+length(unique(tdf_x_main$smart_location)) # 268
+length(unique(tdf$smart_location)) # 250
+```
+
+Now, the date columns; Let's convert them to date type; And then extract the number of years of experience the listing's host has had as a host; We shall also find the number of years since becoming a host did it take for them to get their first review - 
+
+```{r}
+df_x <- df_x %>%
+  mutate(first_review = ymd(first_review),
+         host_since = ymd(host_since),
+         host_age = 2020 - year(host_since),
+         start_to_review_gap = year(first_review) - year(host_since))
+
+  # test data
+tdf <- tdf %>%
+  mutate(first_review = ymd(first_review),
+         host_since = ymd(host_since),
+         host_age = 2020 - year(host_since),
+         start_to_review_gap = year(first_review) - year(host_since))
+```
+
+View the distribution of the host_age and start_to_review_gap -
+
+```{r}
+qplot(df_x$host_since, df_x$first_review)
+qplot(df_x$host_age)
+qplot(df_x$start_to_review_gap)
+```
+
+Replace the NAs in start_to_review_gap and host_age with the respective means of the column
+
+```{r}
+library(tidyr)
+
+sTor_gap <- mean(df_x$start_to_review_gap)
+df_x$start_to_review_gap <- replace_na(df_x$start_to_review_gap, sTor_gap)
+  # test data
+tdf$start_to_review_gap <- replace_na(tdf$start_to_review_gap, sTor_gap)
+
+host_age_mean <- mean(df_x$host_age)
+df_x$host_age <- replace_na(df_x$host_age, host_age_mean)
+  # test data
+tdf$host_age <- replace_na(tdf$start_to_review_gap, host_age_mean)
+
+```
+
+There are some start_to_review_gaps which are lesser than zero (where the first_review date is earlier than the host_since date)
+
+Let's clean it up
+
+```{r}
+df_x$start_to_review_gap[df_x$start_to_review_gap < 0] <- sTor_gap
+  # test data
+tdf$start_to_review_gap[tdf$start_to_review_gap < 0] <- sTor_gap
+```
+
+Let's bucket these variables based on the quantiles -
+
+```{r}
+# host_age / experience
+
+df_x <- df_x %>% 
+  mutate(host_age_q = ntile(host_age, 5))
+
+
+# df_x %>% 
+#   mutate(host_age_q = ntile(host_age, 5)) %>%
+#   group_by(host_age_q, host_age) %>%
+#   summarize(n = n()) %>%
+#   group_by(host_age_q) %>%
+#   summarize(total = sum(n),
+#             min_age = min(host_age),
+#             max_age = max(host_age))
+
+# 1	20000	2	4	
+# 2	20000	4	5	
+# 3	20000	5	6	
+# 4	20000	6	8	
+# 5	20000	8	12	
+
+
+df_x <- df_x %>%	
+	mutate( 
+  		host_lowExp = ifelse(host_age_q == 1, 1, 0),
+  		host_lowMedExp = ifelse(host_age_q == 2, 1, 0),
+  		host_medExp = ifelse(host_age_q == 3, 1, 0),
+  		host_medHighExp = ifelse(host_age_q == 4, 1, 0),
+  		host_highExp = ifelse(host_age_q == 5, 1, 0)
+  		)
+
+tdf <- tdf %>%
+  mutate(
+      host_lowExp = ifelse((host_age >= 2) & (host_age < 4), 1, 0),
+  		host_lowMedExp = ifelse((host_age >= 4) & (host_age < 5), 1, 0),
+  		host_medExp = ifelse((host_age >= 5) & (host_age < 6), 1, 0),
+  		host_medHighExp = ifelse((host_age >= 6) & (host_age < 8), 1, 0),
+  		host_highExp = ifelse((host_age >= 8) & (host_age < 12), 1, 0) 
+  )
+```
+
+Now the start_to_review_gap - 
+
+Let's first check the outliers to impute -
+```{r}
+sTorR_OutVals <- boxplot(df_x$start_to_review_gap)$out
+sTorR_OutVals
+sTorR_TestOutVals <- boxplot(tdf$start_to_review_gap)$out
+sTorR_TestOutVals
+```
+
+Change the outliers - 
+
+```{r}
+df_x$start_to_review_gap[df_x$start_to_review_gap > 7] <- 6
+tdf$start_to_review_gap[tdf$start_to_review_gap > 7] <- 6
+```
+
+
+```{r}
+df_x <- df_x %>% 
+  mutate(sTor_gap_q = ntile(start_to_review_gap, 3))
+
+
+# df_x %>%
+#   mutate(sTor_gap_q = ntile(start_to_review_gap, 3)) %>%
+#   group_by(sTor_gap_q, start_to_review_gap) %>%
+#   summarize(n = n()) %>%
+#   group_by(sTor_gap_q) %>%
+#   summarize(total = sum(n),
+#             min_age = min(start_to_review_gap),
+#             max_age = max(start_to_review_gap))
+
+# 1	33334	0	1	
+# 2	33333	1	2	
+# 3	33333	2	7	
+
+df_x <- df_x %>%
+	mutate(
+  		NoGap_sTor = ifelse(sTor_gap_q == 1, 1, 0),
+  		Yr1Gap_sTor = ifelse(sTor_gap_q == 2, 1, 0),
+  		HighGap_sTor = ifelse(sTor_gap_q == 3, 1, 0)
+  		)
+
+tdf <- tdf %>%
+  mutate(
+      NoGap_sTor = ifelse(start_to_review_gap == 0, 1, 0),
+  		Yr1Gap_sTor = ifelse(start_to_review_gap == 1, 1, 0),
+  		HighGap_sTor = ifelse(start_to_review_gap >= 2, 1, 0)
+  )
+
+```
+
+Dummy variables for state -
+
+```{r}
+df_x <- df_x %>%
+	mutate(
+  		In_CA = ifelse(state == 'CA', 1, 0),
+  		In_CO = ifelse(state == 'CO', 1, 0),
+  		In_DC = ifelse(state == 'DC', 1, 0),
+  		In_IL = ifelse(state == 'IL', 1, 0),
+  		In_MA = ifelse(state == 'MA', 1, 0),
+  		In_NC = ifelse(state == 'NC', 1, 0),
+  		In_NY = ifelse(state == 'NY', 1, 0),
+  		In_OR = ifelse(state == 'OR', 1, 0),
+  		In_TN = ifelse(state == 'TN', 1, 0),
+  		In_TX = ifelse(state == 'TX', 1, 0),
+  		In_WA = ifelse(state == 'WA', 1, 0)
+  		)
+  # test data
+
+tdf <- tdf %>%
+	mutate(
+  		In_CA = ifelse(state == 'CA', 1, 0),
+  		In_CO = ifelse(state == 'CO', 1, 0),
+  		In_DC = ifelse(state == 'DC', 1, 0),
+  		In_IL = ifelse(state == 'IL', 1, 0),
+  		In_MA = ifelse(state == 'MA', 1, 0),
+  		In_NC = ifelse(state == 'NC', 1, 0),
+  		In_NY = ifelse(state == 'NY', 1, 0),
+  		In_OR = ifelse(state == 'OR', 1, 0),
+  		In_TN = ifelse(state == 'TN', 1, 0),
+  		In_TX = ifelse(state == 'TX', 1, 0),
+  		In_WA = ifelse(state == 'WA', 1, 0)
+  		)
+
+```
+
+Let's also include city_name dummies. There might be more variance with these because parameters might change based on cities rather than state on the whole - 
+
+```{r}
+unique(df_x$city_name)
+unique(tdf$city_name)
+```
+
+Let's create dummies then,
+
+```{r}
+
+df_x <- df_x %>%
+	mutate(
+  		In_NAS = ifelse(city_name == 'NASHVILLE', 1, 0),
+  		In_LA = ifelse(city_name == 'LOS ANGELES', 1, 0),
+  		In_SD = ifelse(city_name == 'SAN DIEGO', 1, 0),
+  		In_WDC = ifelse(city_name == 'WASHINGTON DC', 1, 0),
+  		In_NWO = ifelse(city_name == 'NEW ORLEANS', 1, 0),
+  		In_SFO = ifelse(city_name == 'SAN FRANCISCO', 1, 0),
+  		In_NYC = ifelse(city_name == 'NEW YORK', 1, 0),
+  		In_SEA = ifelse(city_name == 'SEATTLE', 1, 0),
+  		In_CHI = ifelse(city_name == 'CHICAGO', 1, 0),
+  		In_BOS = ifelse(city_name == 'BOSTON', 1, 0),
+  		In_AUS = ifelse(city_name == 'AUSTIN', 1, 0),
+  		In_PO = ifelse(city_name == 'PORTLAND', 1, 0),
+  		In_DEN = ifelse(city_name == 'DENVER', 1, 0),
+  		In_SCU = ifelse(city_name == 'SANTA CRUZ', 1, 0),
+  		In_OAK = ifelse(city_name == 'OAKLAND', 1, 0),
+  		In_ASH = ifelse(city_name == 'ASHEVILLE', 1, 0)
+  		)
+  # test data
+
+tdf <- tdf %>%
+	mutate(
+  		In_NAS = ifelse(city_name == 'NASHVILLE', 1, 0),
+  		In_LA = ifelse(city_name == 'LOS ANGELES', 1, 0),
+  		In_SD = ifelse(city_name == 'SAN DIEGO', 1, 0),
+  		In_WDC = ifelse(city_name == 'WASHINGTON DC', 1, 0),
+  		In_NWO = ifelse(city_name == 'NEW ORLEANS', 1, 0),
+  		In_SFO = ifelse(city_name == 'SAN FRANCISCO', 1, 0),
+  		In_NYC = ifelse(city_name == 'NEW YORK', 1, 0),
+  		In_SEA = ifelse(city_name == 'SEATTLE', 1, 0),
+  		In_CHI = ifelse(city_name == 'CHICAGO', 1, 0),
+  		In_BOS = ifelse(city_name == 'BOSTON', 1, 0),
+  		In_AUS = ifelse(city_name == 'AUSTIN', 1, 0),
+  		In_PO = ifelse(city_name == 'PORTLAND', 1, 0),
+  		In_DEN = ifelse(city_name == 'DENVER', 1, 0),
+  		In_SCU = ifelse(city_name == 'SANTA CRUZ', 1, 0),
+  		In_OAK = ifelse(city_name == 'OAKLAND', 1, 0),
+  		In_ASH = ifelse(city_name == 'ASHEVILLE', 1, 0)
+  		)
+
+```
+
+Cancellation Policy -
+
+```{r}
+# View(table(df_x$cancellation_policy))
+
+# 7	strict	47372
+# 5	moderate	30411
+# 4	flexible	21837
+# 8	super_strict_30	261
+# 9	super_strict_60	106
+# 6	no_refunds	4
+
+strict <- c("no_refunds", "super_strict_60", "super_strict_30", "strict")
+
+
+df_x <- df_x %>%
+	mutate(
+  		CancelPol_Strict = ifelse(cancellation_policy %in% strict, 1, 0),
+  		CancelPol_Mod = ifelse(cancellation_policy == 'moderate', 1, 0),
+  		CancelPol_Flexy = ifelse(cancellation_policy == 'flexible', 1, 0)
+  		)
+  # test data
+tdf <- tdf %>%
+	mutate(
+  		CancelPol_Strict = ifelse(cancellation_policy %in% strict, 1, 0),
+  		CancelPol_Mod = ifelse(cancellation_policy == 'moderate', 1, 0),
+  		CancelPol_Flexy = ifelse(cancellation_policy == 'flexible', 1, 0)
+  		)
+
+```
+
+Room Type and Property Type -
+
+```{r}
+# View(table(df_x$room_type))
+
+# 1	Entire home/apt	60892
+# 2	Private room	36617
+# 3	Shared room	2472
+
+# View(table(tdf$room_type))
+
+# 1	Entire home/apt	7425
+# 2	Private room	4480
+# 3	Shared room	300
+
+df_x <- df_x %>%
+	mutate(
+  		WholePlace = ifelse(room_type == 'Entire home/apt', 1, 0),
+  		PrivateRoom = ifelse(room_type == 'Private room', 1, 0),
+  		SharedRoom = ifelse(room_type == 'Shared room', 1, 0)
+  		)
+  # test data
+tdf <- tdf %>%
+	mutate(
+  		WholePlace = ifelse(room_type == 'Entire home/apt', 1, 0),
+  		PrivateRoom = ifelse(room_type == 'Private room', 1, 0),
+  		SharedRoom = ifelse(room_type == 'Shared room', 1, 0)
+  		)
+
+```
+
+
+Property type - 
+
+```{r}
+df_x$property_type <- trim.space(str_to_upper(df_x$property_type))
+tdf$property_type <- trim.space(str_to_upper(tdf$property_type))
+
+# View(table(df_x$property_type))
+
+apartment_types = c("APARTMENT", "CONDOMINIUM", "LOFT", "IN-LAW")
+house_types = c("HOUSE", "TOWNHOUSE", "GUESTHOUSE", "TINY HOUSE", "BUNGALOW", "VILLA", "CASA PARTICULAR (CUBA)")
+hotel_types = c("BED & BREAKFAST", "BED AND BREAKFAST", "SERVICED APARTMENT", "HOTEL", "APARTHOTEL", "GUEST SUITE")
+holiday_types = c("RESORT", "VACATION HOME", "CABIN", "CHALET", "TIMESHARE", "BOAT", "TREEHOUSE", "YURT", "COTTAGE", "HUT", "ISLAND", "BOUTIQUE HOTEL", "CASTLE", "EARTH HOUSE", "CAVE", "TRAIN", "FARM STAY", "BARN", "LIGHTHOUSE", "NATURE LODGE", "PLANE")
+other_types = c("OTHER", "DORM", "CAMPER/RV", "HOSTEL", "TENT", "TIPI")
+
+df_x <- df_x %>%
+	mutate(
+  		propertyApartment = ifelse(property_type %in% apartment_types, 1, 0),
+  		propertyHouse = ifelse(property_type %in% house_types, 1, 0),
+  		propertyHotel = ifelse(property_type %in% hotel_types, 1, 0),
+  		propertyHoliday = ifelse(property_type %in% holiday_types, 1, 0),
+  		propertyOther = ifelse(property_type %in% other_types, 1, 0)
+  		)
+  # test data
+# View(table(tdf$property_type))
+
+tdf <- tdf %>%
+	mutate(
+  		propertyApartment = ifelse(property_type %in% apartment_types, 1, 0),
+  		propertyHouse = ifelse(property_type %in% house_types, 1, 0),
+  		propertyHotel = ifelse(property_type %in% hotel_types, 1, 0),
+  		propertyHoliday = ifelse(property_type %in% holiday_types, 1, 0),
+  		propertyOther = ifelse(property_type %in% other_types, 1, 0)
+  		)
+```
+
+Bed Type -
+
+```{r}
+# View(table(df_x$bed_type))
+# View(table(tdf$bed_type))
+# View(table(df_x$bed_type, df_y$high_booking_rate))
+  
+# 3	  Airbed	0	449
+# 4	  Couch	0	213
+# 5	  Futon	0	805
+# 6	  Pull-out Sofa	0	556
+# 7	  Real Bed	0	72828
+# 
+# 10	Airbed	1	89
+# 11	Couch	1	48
+# 12	Futon	1	191
+# 13	Pull-out Sofa	1	164
+# 14	Real Bed	1	24638
+
+uncomfyBeds = c("Airbed", "Couch", "Futon", "Pull-out Sofa")
+
+df_x <- df_x %>%
+	mutate(
+  		bed_Real = ifelse(bed_type == 'Real Bed', 1, 0),
+  		bed_Uncomfy = ifelse(bed_type %in% uncomfyBeds, 1, 0)
+  		)
+  # test data
+tdf <- tdf %>%
+	mutate(
+  		bed_Real = ifelse(bed_type == 'Real Bed', 1, 0),
+  		bed_Uncomfy = ifelse(bed_type %in% uncomfyBeds, 1, 0)
+  		)
+```
+
+host_response_time
+
+```{r}
+# View(table(df_x$host_response_time, df_y$high_booking_rate))
+# View(table(df_x$host_response_time))
+# View(table(tdf$host_response_time))
+
+# 1	a few days or more	0	1350
+# 2	f	0	0
+# 3	within a day	0	9800
+# 4	within a few hours	0	14333
+# 5	within an hour	0	33865
+# 6	a few days or more	1	55
+# 7	f	1	0
+# 8	within a day	1	857
+# 9	within a few hours	1	2929
+# 10	within an hour	1	21008
+
+# replacing na with the second most popular category
+df_x$host_response_time <- replace_na(df_x$host_response_time, 'within a few hours')
+
+df_x <- df_x %>%
+	mutate(
+  		hRes_FewDays = ifelse(host_response_time == 'a few days or more', 1, 0),
+  		hRes_1Day = ifelse(host_response_time == 'within a day', 1, 0),
+  		hRes_FewHours = ifelse(host_response_time == 'within a few hours', 1, 0),
+  		hRes_1Hour = ifelse(host_response_time == 'within an hour', 1, 0)
+  		)
+  # test data
+tdf <- tdf %>%
+	mutate(
+  		hRes_FewDays = ifelse(host_response_time == 'a few days or more', 1, 0),
+  		hRes_1Day = ifelse(host_response_time == 'within a day', 1, 0),
+  		hRes_FewHours = ifelse(host_response_time == 'within a few hours', 1, 0),
+  		hRes_1Hour = ifelse(host_response_time == 'within an hour', 1, 0)
+  		)
+
+```
+
+
+```{r}
+View(df_x$host_verifications)
+View(df_x$amenities)
+```
+
+
+
+Some text mining on the columns with categorical lists -
+
+```{r}
+library(qdap)
+
+df_x$host_verifications <- as.character(df_x$host_verifications)
+df_x$host_verifications <- trim.space(str_to_lower(df_x$host_verifications))
+freq_verifs <- freq_terms(df_x$host_verifications, 50)
+
+```
+
+```{r}
+plot(freq_verifs)
+```
+
+Dummies for number of host verifications
+
+```{r}
+
+df_x <- df_x %>%
+	mutate(
+  		No_of_Verifs = str_count(df_x$host_verifications, ",") + 1
+  		)
+
+# View(table(df_x$No_of_Verifs))
+
+# 1	  1	  241
+# 2	  2	  1978
+# 3	  3	  16077
+# 4	  4	  35876
+# 5	  5	  23967
+# 6	  6	  10773
+# 7	  7	  4552
+# 8	  8	  3522
+# 9	  9	  1984
+# 10	10	707
+# 11	11	217
+# 12	12	71
+# 13	13	14
+# 14	14	2
+
+df_x <- df_x %>%
+	mutate(
+  		verifs_vLow = ifelse((No_of_Verifs >= 1) & (No_of_Verifs <= 2), 1, 0),
+  		verifs_Med = ifelse((No_of_Verifs >= 3) & (No_of_Verifs <= 5), 1, 0),
+  		verifs_High = ifelse((No_of_Verifs >= 6) & (No_of_Verifs <= 8), 1, 0),
+  		verifs_VHigh = ifelse(No_of_Verifs >= 9, 1, 0)
+  		)
+  # test data
+tdf <- tdf %>%
+	mutate(
+  		No_of_Verifs = str_count(tdf$host_verifications, ",") + 1
+  		)
+
+tdf <- tdf %>%
+	mutate(
+  		verifs_vLow = ifelse((No_of_Verifs >= 1) & (No_of_Verifs <= 2), 1, 0),
+  		verifs_Med = ifelse((No_of_Verifs >= 3) & (No_of_Verifs <= 5), 1, 0),
+  		verifs_High = ifelse((No_of_Verifs >= 6) & (No_of_Verifs <= 8), 1, 0),
+  		verifs_VHigh = ifelse(No_of_Verifs >= 9, 1, 0)
+  		)
+
+```
+
+Create further dummies based on popular verification types -
+
+```{r}
+
+# 1 phone 2 reviews 3 email 4 jumio 5 kba 6 facebook 7 governmentid 8 workemail 9 offlinegovernmentid 10 google
+
+df_x <- df_x %>%
+  mutate(
+    facebookVer = ifelse(grepl("facebook", host_verifications), 1, 0),
+    googleVer = ifelse(grepl("google", host_verifications), 1, 0),
+    govtIDVer = ifelse(grepl("government_id", host_verifications), 1, 0),
+    jumioVer = ifelse(grepl("jumio", host_verifications), 1, 0),
+    kbaVer = ifelse(grepl("kba", host_verifications), 1, 0)
+  )
+  # test data
+
+tdf <- tdf %>%
+  mutate(
+    facebookVer = ifelse(grepl("facebook", host_verifications), 1, 0),
+    googleVer = ifelse(grepl("google", host_verifications), 1, 0),
+    govtIDVer = ifelse(grepl("government_id", host_verifications), 1, 0),
+    jumioVer = ifelse(grepl("jumio", host_verifications), 1, 0),
+    kbaVer = ifelse(grepl("kba", host_verifications), 1, 0)
+  )
+
+```
+
+Now, the harder one - amenities -
+
+```{r}
+df_x$amenities <- as.character(df_x$amenities)
+df_x$amenities <- trim.space(str_to_lower(df_x$amenities))
+df_x$amenities <- str_replace_all(df_x$amenities, " ", "_")
+# View(df_x$amenities)
+  # test data
+tdf$amenities <- as.character(tdf$amenities)
+tdf$amenities <- trim.space(str_to_lower(tdf$amenities))
+tdf$amenities <- str_replace_all(tdf$amenities, " ", "_")
+```
+
+Further, let's count the number of amenities as well as the most popular amenities -
+
+```{r}
+df_x <- df_x %>%
+  mutate(No_of_Amens = str_count(amenities, ",") + 1)
+
+# df_x %>% 
+#   mutate(amens_q = ntile(No_of_Amens, 5)) %>%
+#   group_by(amens_q, No_of_Amens) %>%
+#   summarize(n = n()) %>%
+#   group_by(amens_q) %>%
+#   summarize(total = sum(n),
+#             min_age = min(No_of_Amens),
+#             max_age = max(No_of_Amens))
+
+# 1	19999	1	  13	
+# 2	19998	13	17	
+# 3	19998	17	21	
+# 4	19998	21	25	
+# 5	19998	25	78
+
+amens_avg <- mean(df_x$No_of_Amens)
+
+df_x$No_of_Amens <- replace_na(df_x$No_of_Amens, amens_avg)
+
+df_x <- df_x %>%
+  mutate(
+    vlowAmens = ifelse((No_of_Amens >= 1) & (No_of_Amens < 13), 1, 0),
+    lowAmens = ifelse((No_of_Amens >= 13) & (No_of_Amens < 17), 1, 0),
+    medAmens = ifelse((No_of_Amens >= 17) & (No_of_Amens < 21), 1, 0),
+    highAmens = ifelse((No_of_Amens >= 21) & (No_of_Amens < 25), 1, 0),
+    vhighAmens = ifelse(No_of_Amens > 25, 1, 0)
+         )
+  # test data
+tdf <- tdf %>%
+  mutate(No_of_Amens = str_count(amenities, ",") + 1)
+
+tdf <- tdf %>%
+  mutate(
+    vlowAmens = ifelse((No_of_Amens >= 1) & (No_of_Amens < 13), 1, 0),
+    lowAmens = ifelse((No_of_Amens >= 13) & (No_of_Amens < 17), 1, 0),
+    medAmens = ifelse((No_of_Amens >= 17) & (No_of_Amens < 21), 1, 0),
+    highAmens = ifelse((No_of_Amens >= 21) & (No_of_Amens < 25), 1, 0),
+    vhighAmens = ifelse(No_of_Amens > 25, 1, 0)
+         )
+
+```
+
+```{r, fig.height=10, fig.width=10}
+k <- gsub(",", " ", df_x$amenities)
+freq_amenities <- freq_terms(k, 50)
+plot(freq_amenities)
+```
+
+More dummies for specific amenities -
+
+```{r}
+
+kitchen_amens <- "kitchen|microwave|stove"
+kitchen2_amens <- "coffee_maker|refrigerator"
+heat_amens <- "heating"
+ac_amens <- "air_conditioning"
+tv_amens <- "tv|cable_tv"
+wifi_amens <- "internet|wireless_internet|wifi"
+pets_amens <- "pets_allowed|dogs"
+luxury_amens <- "gym|hot_tub|pool|indoor_fireplace|breakfast"
+petsLiveHere <- "pets_live_on_this_property"
+workspace_amens <- "laptop_friendly_workspace"
+parking_amens <- "free_parking_on_premises"
+extrabedding <- "bed_linens|extra_pillows_and_blankets"
+elevator_amens <- "elevator|elevator_in_building"
+privacy_amens <- "private_entrance|lock_on_bedroom_door"
+
+df_x[grep(kitchen_amens, df_x$amenities, value = F), "hasKitchen1"] <- 1
+df_x[grep(kitchen2_amens, df_x$amenities, value = F), "hasKitchen2"] <- 1
+df_x[grep(heat_amens, df_x$amenities, value = F), "hasHeating"] <- 1
+df_x[grep(ac_amens, df_x$amenities, value = F), "hasAC"] <- 1
+df_x[grep(tv_amens, df_x$amenities, value = F), "hasTV"] <- 1
+df_x[grep(wifi_amens, df_x$amenities, value = F), "hasWiFi"] <- 1
+df_x[grep(pets_amens, df_x$amenities, value = F), "PetsAllowed"] <- 1
+df_x[grep(luxury_amens, df_x$amenities, value = F), "hasLuxuryAmens"] <- 1
+df_x[grep(petsLiveHere, df_x$amenities, value = F), "petsLiveHere"] <- 1
+df_x[grep(workspace_amens, df_x$amenities, value = F), "hasWorkspace"] <- 1
+df_x[grep(parking_amens, df_x$amenities, value = F), "hasFreeParking"] <- 1
+df_x[grep(extrabedding, df_x$amenities, value = F), "extraBedding"] <- 1
+df_x[grep(elevator_amens, df_x$amenities, value = F), "hasElevator"] <- 1
+df_x[grep(privacy_amens, df_x$amenities, value = F), "hasPrivacyAmens"] <- 1
+  # test data
+tdf[grep(kitchen_amens, tdf$amenities, value = F), "hasKitchen1"] <- 1
+tdf[grep(kitchen2_amens, tdf$amenities, value = F), "hasKitchen2"] <- 1
+tdf[grep(heat_amens, tdf$amenities, value = F), "hasHeating"] <- 1
+tdf[grep(ac_amens, tdf$amenities, value = F), "hasAC"] <- 1
+tdf[grep(tv_amens, tdf$amenities, value = F), "hasTV"] <- 1
+tdf[grep(wifi_amens, tdf$amenities, value = F), "hasWiFi"] <- 1
+tdf[grep(pets_amens, tdf$amenities, value = F), "PetsAllowed"] <- 1
+tdf[grep(luxury_amens, tdf$amenities, value = F), "hasLuxuryAmens"] <- 1
+tdf[grep(petsLiveHere, tdf$amenities, value = F), "petsLiveHere"] <- 1
+tdf[grep(workspace_amens, tdf$amenities, value = F), "hasWorkspace"] <- 1
+tdf[grep(parking_amens, tdf$amenities, value = F), "hasFreeParking"] <- 1
+tdf[grep(extrabedding, tdf$amenities, value = F), "extraBedding"] <- 1
+tdf[grep(elevator_amens, tdf$amenities, value = F), "hasElevator"] <- 1
+tdf[grep(privacy_amens, tdf$amenities, value = F), "hasPrivacyAmens"] <- 1
+
+
+```
+
+Replace NAs in the newly created columns with 0s
+
+```{r}
+amenCols <- c("hasKitchen1", "hasKitchen2", "hasHeating", "hasAC", 
+              "hasTV", "hasWiFi", "PetsAllowed", "hasLuxuryAmens", 
+              "petsLiveHere", "hasWorkspace", "hasFreeParking", 
+              "extraBedding", "hasElevator", "hasPrivacyAmens")
+
+df_x$hasKitchen1 <- replace_na(df_x$hasKitchen1, 0)
+df_x$hasKitchen2 <- replace_na(df_x$hasKitchen2, 0)
+df_x$hasHeating <- replace_na(df_x$hasHeating, 0)
+df_x$hasAC <- replace_na(df_x$hasAC, 0)
+df_x$hasTV <- replace_na(df_x$hasTV, 0)
+df_x$hasWiFi <- replace_na(df_x$hasWiFi, 0)
+df_x$PetsAllowed <- replace_na(df_x$PetsAllowed, 0)
+df_x$hasLuxuryAmens <- replace_na(df_x$hasLuxuryAmens, 0)
+df_x$petsLiveHere <- replace_na(df_x$petsLiveHere, 0)
+df_x$hasWorkspace <- replace_na(df_x$hasWorkspace, 0)
+df_x$hasFreeParking <- replace_na(df_x$hasFreeParking, 0)
+df_x$extraBedding <- replace_na(df_x$extraBedding, 0)
+df_x$hasElevator <- replace_na(df_x$hasElevator, 0)
+df_x$hasPrivacyAmens <- replace_na(df_x$hasPrivacyAmens, 0)
+  # test data
+tdf$hasKitchen1 <- replace_na(tdf$hasKitchen1, 0)
+tdf$hasKitchen2 <- replace_na(tdf$hasKitchen2, 0)
+tdf$hasHeating <- replace_na(tdf$hasHeating, 0)
+tdf$hasAC <- replace_na(tdf$hasAC, 0)
+tdf$hasTV <- replace_na(tdf$hasTV, 0)
+tdf$hasWiFi <- replace_na(tdf$hasWiFi, 0)
+tdf$PetsAllowed <- replace_na(tdf$PetsAllowed, 0)
+tdf$hasLuxuryAmens <- replace_na(tdf$hasLuxuryAmens, 0)
+tdf$petsLiveHere <- replace_na(tdf$petsLiveHere, 0)
+tdf$hasWorkspace <- replace_na(tdf$hasWorkspace, 0)
+tdf$hasFreeParking <- replace_na(tdf$hasFreeParking, 0)
+tdf$extraBedding <- replace_na(tdf$extraBedding, 0)
+tdf$hasElevator <- replace_na(tdf$hasElevator, 0)
+tdf$hasPrivacyAmens <- replace_na(tdf$hasPrivacyAmens, 0)
+
+```
+
+I'd like to see if smoking is allowed or not from the house rules column -
+
+For that, trim spaces and convert to lowercase first -
+
+```{r}
+
+df_x$house_rules <- as.character(df_x$house_rules)
+df_x$house_rules <- trim.space(str_to_lower(df_x$house_rules))
+  # test data
+tdf$house_rules <- as.character(tdf$house_rules)
+tdf$house_rules <- trim.space(str_to_lower(tdf$house_rules))
+
+```
+
+
+```{r}
+df_x[grep("no smoking", df_x$house_rules, value = F), "NoSmoking"] <- 1
+df_x$NoSmoking[is.na(df_x$NoSmoking)] <- 0
+  # test data
+tdf[grep("no smoking", tdf$house_rules, value = F), "NoSmoking"] <- 1
+tdf$NoSmoking[is.na(tdf$NoSmoking)] <- 0
+
+```
+
+Is host from USA?
+
+```{r}
+df_x$host_location <- trim.space(str_to_lower(df_x$host_location))
+  # test data
+tdf$host_location <- trim.space(str_to_lower(tdf$host_location))
+
+df_x <- df_x %>%
+  mutate(
+    isHost_in_US = ifelse(grepl("united states", host_location), 1, 0)
+  )
+  # test data
+tdf <- tdf %>%
+  mutate(
+    isHost_in_US = ifelse(grepl("united states", host_location), 1, 0)
+  )
+
+```
+
+More processing on the numerical columns now -
+
+accommodates
+availability_30
+availability_365
+availability_60
+availability_90
+bathrooms
+bedrooms
+beds
+cleaning_fee
+extra_people
+guests_included
+
+host_listings_count
+host_response_rate
+host_total_listings_count
+
+maximum_nights
+minimum_nights
+
+price
+
+
+```{r}
+
+# View(table(df_x$guests_included)) There are some 0s
+# View(table(df_x$accommodates)) There are no 0s
+
+# Replacing the 0s and NAs in guests_included with 1s, the most popular category
+
+df_x$guests_included[df_x$guests_included == 0] <- 1
+df_x$guests_included <- replace_na(df_x$guests_included, 1)
+ # test data
+tdf$guests_included[tdf$guests_included == 0] <- 1
+tdf$guests_included <- replace_na(tdf$guests_included, 1)
+
+# The price can also include the cleaning fee
+
+# summary(df_x$cleaning_fee) - median is 50
+
+df_x$cleaning_fee <- replace_na(df_x$cleaning_fee, 50)
+  # test data
+tdf$cleaning_fee <- replace_na(tdf$cleaning_fee, 50)
+
+# The security deposit has 40K NAs
+
+# summary(df_x$security_deposit)
+
+df_x$security_deposit <- replace_na(df_x$security_deposit, 200)
+  # test data
+tdf$security_deposit <- replace_na(tdf$security_deposit, 200)
+
+df_x <- df_x %>%
+  mutate(
+    bathroomGuestRatio = bathrooms/accommodates,
+    bedroomsGuestRatio = bedrooms/accommodates,
+    bedsGuestsRatio = beds/accommodates,
+    pricePerGuest = (price + cleaning_fee)/guests_included,
+    sec_dep_perc = ifelse(price >=1 , (100*security_deposit)/price, 60)
+  )
+  # test data
+tdf <- tdf %>%
+  mutate(
+    bathroomGuestRatio = bathrooms/accommodates,
+    bedroomsGuestRatio = bedrooms/accommodates,
+    bedsGuestsRatio = beds/accommodates,
+    pricePerGuest = (price + cleaning_fee)/guests_included,
+    sec_dep_perc = ifelse(price >=1 , (100*security_deposit)/price, 60)
+  )
+```
+
+There are some sec_dep_perc that are greater than 100!
+
+Let's change those -
+
+```{r}
+df_x$sec_dep_perc[df_x$sec_dep_perc > 100] <- 60
+  # test data
+tdf$sec_dep_perc[tdf$sec_dep_perc > 100] <- 60
+```
+
+Now, we can bin the security deposits -
+
+```{r}
+df_x <- df_x %>%
+  mutate(
+    secDep0 = ifelse(sec_dep_perc == 0, 1, 0),
+    secDepGen = ifelse((sec_dep_perc > 0) & (sec_dep_perc <= 60), 1, 0),
+    secDepHigh = ifelse(sec_dep_perc > 60, 1, 0)
+  )
+  # test data
+tdf <- tdf %>%
+  mutate(
+    secDep0 = ifelse(sec_dep_perc == 0, 1, 0),
+    secDepGen = ifelse((sec_dep_perc > 0) & (sec_dep_perc <= 60), 1, 0),
+    secDepHigh = ifelse(sec_dep_perc > 60, 1, 0)
+  )
+```
+
+The pricePerGuest can be further divided into dummies based on quantiles -
+
+```{r}
+# df_x %>% 
+#   mutate(pPG_q = ntile(pricePerGuest, 5)) %>%
+#   group_by(pPG_q, pricePerGuest) %>%
+#   summarize(n = n()) %>%
+#   group_by(pPG_q) %>%
+#   summarize(total = sum(n),
+#             min_age = min(pricePerGuest),
+#             max_age = max(pricePerGuest))
+# 
+# summary(df_x$pricePerGuest)
+
+df_x <- df_x %>%
+  mutate(
+    vlow_pPG = ifelse((pricePerGuest >= 0) & (pricePerGuest < 44), 1, 0),
+    low_pPG = ifelse((pricePerGuest >= 44) & (pricePerGuest < 87.5), 1, 0),
+    med_pPG = ifelse((pricePerGuest >= 87.5) & (pricePerGuest < 250), 1, 0),
+    high_pPG = ifelse((pricePerGuest >= 250) & (pricePerGuest < 1000), 1, 0),
+    vHigh_pPG = ifelse(pricePerGuest >= 1000, 1, 0)
+  )
+  # test data
+tdf <- tdf%>%
+  mutate(
+    vlow_pPG = ifelse((pricePerGuest >= 0) & (pricePerGuest < 44), 1, 0),
+    low_pPG = ifelse((pricePerGuest >= 44) & (pricePerGuest < 87.5), 1, 0),
+    med_pPG = ifelse((pricePerGuest >= 87.5) & (pricePerGuest < 250), 1, 0),
+    high_pPG = ifelse((pricePerGuest >= 250) & (pricePerGuest < 1000), 1, 0),
+    vHigh_pPG = ifelse(pricePerGuest >= 1000, 1, 0)
+  )
+```
+
+Making dummies of bathroomGuestRatio, bedsGuestRatio, and bedroomsGuestRation -
+
+First, bedsGuestsRatio -
+
+```{r}
+
+# df_x %>%
+#   mutate(bGR_q = ntile(bedsGuestsRatio, 5)) %>%
+#   group_by(bGR_q, bedsGuestsRatio) %>%
+#   summarize(n = n()) %>%
+#   group_by(bGR_q) %>%
+#   summarize(total = sum(n),
+#             min_age = min(bedsGuestsRatio),
+#             max_age = max(bedsGuestsRatio))
+# 
+# summary(df_x$bedsGuestsRatio)
+
+df_x$bedsGuestsRatio <- replace_na(df_x$bedsGuestsRatio, 1)
+  # test data
+tdf$bedsGuestsRatio <- replace_na(tdf$bedsGuestsRatio, 1)
+
+df_x <- df_x %>%
+  mutate(
+    beds_Comfy = ifelse((bedsGuestsRatio >= 0.7333333) & (bedsGuestsRatio < 1.3), 1, 0),
+    beds_Cramped = ifelse(bedsGuestsRatio < 0.7333333, 1, 0),
+    beds_Excess = ifelse(bedsGuestsRatio > 1.3, 1, 0)
+  )
+  # test data
+tdf <- tdf %>%
+  mutate(
+    beds_Comfy = ifelse((bedsGuestsRatio >= 0.7333333) & (bedsGuestsRatio < 1.3), 1, 0),
+    beds_Cramped = ifelse(bedsGuestsRatio < 0.7333333, 1, 0),
+    beds_Excess = ifelse(bedsGuestsRatio > 1.3, 1, 0)
+  )
+
+```
+
+Second, bathroomGuestRatio
+
+```{r}
+# df_x %>%
+#   mutate(baGR_q = ntile(bathroomGuestRatio, 5)) %>%
+#   group_by(baGR_q, bathroomGuestRatio) %>%
+#   summarize(n = n()) %>%
+#   group_by(baGR_q) %>%
+#   summarize(total = sum(n),
+#             min_age = min(bathroomGuestRatio),
+#             max_age = max(bathroomGuestRatio))
+# 
+# summary(df_x$bathroomGuestRatio)
+
+df_x$bathroomGuestRatio <- replace_na(df_x$bedsGuestsRatio, 0.7)
+  # test data
+tdf$bathroomGuestRatio <- replace_na(tdf$bathroomGuestRatio, 0.7)
+
+df_x <- df_x %>%
+  mutate(
+    baths_Comfy = ifelse((bedsGuestsRatio >= 0.5) & (bedsGuestsRatio < 1.2), 1, 0),
+    baths_Cramped = ifelse(bedsGuestsRatio < 0.5, 1, 0),
+    baths_Excess = ifelse(bedsGuestsRatio > 1.2, 1, 0)
+  )
+  # test data
+tdf <- tdf %>%
+  mutate(
+    baths_Comfy = ifelse((bedsGuestsRatio >= 0.5) & (bedsGuestsRatio < 1.2), 1, 0),
+    baths_Cramped = ifelse(bedsGuestsRatio < 0.5, 1, 0),
+    baths_Excess = ifelse(bedsGuestsRatio > 1.2, 1, 0)
+  )
+```
+
+Finally, bedroomsGuestRation 
+
+```{r}
+# summary(df_x$bedroomsGuestRatio)
+
+df_x$bedroomsGuestRatio <- replace_na(df_x$bedroomsGuestRatio, 0.5)
+  # test data
+tdf$bedroomsGuestRatio <- replace_na(tdf$bedroomsGuestRatio, 0.5)
+
+df_x <- df_x %>%
+  mutate(
+    bedrooms_Comfy = ifelse((bedroomsGuestRatio >= 0.5) & (bedroomsGuestRatio < 1.2), 1, 0),
+    bedrooms_Cramped = ifelse(bedroomsGuestRatio < 0.5, 1, 0),
+    bedrooms_Excess = ifelse(bedroomsGuestRatio > 1.2, 1, 0)
+  )
+  # test data
+tdf <- tdf %>%
+  mutate(
+    bedrooms_Comfy = ifelse((bedroomsGuestRatio >= 0.5) & (bedroomsGuestRatio < 1.2), 1, 0),
+    bedrooms_Cramped = ifelse(bedroomsGuestRatio < 0.5, 1, 0),
+    bedrooms_Excess = ifelse(bedroomsGuestRatio > 1.2, 1, 0)
+  )
+```
+
+There are columns with text in them -
+  
+1. df$access - Something like 'I like to feel right at home'
+2. df$amenities - {TV, \"Cable TV"}
+3. df$description - "Vacation in this Nashville home featuring a premier location"
+4. df$host_about - "I am from Virginia, USA and my wife is from Istanbul, Turkey"
+5. df$host_location - "Nashville, Tennessee, United States", "Los Angeles, California, United States"
+6. df$host_name - May & Eric, Jonathon, Jeremy, Gene, Holly, Nathan, Gregg, Alicia, Laura, Raymond
+7. df$host_neighbourhood - , Silver Lake, East Village, Near Northeast/H Street Corridor, Bayou St. John
+8. df$host_verifications - "['email', 'phone', 'google', 'reviews']", "['email', 'phone', 'reviews', 'jumio']"
+9. df$house_rules - "No pets, parties, or indoor smoking. Feel free to use everything in kitchen bu"
+10. df$interaction - "Don't hesitate to call or text any time throughout your stay! Where you are looking fo"
+11. df$jurisdiction_names - "City of Los Angeles, CA", "SAN DIEGO, SAN DIEGO TOURISM MARKETING DISTRICT A, SAN"
+12. df$license - "17STR-04969", "1075925", "17STR-14190"
+13. df$name - "BRAND NEW ! NASHVILLE LOFT", "Silverlake Hills Home with View"
+14. df$neighborhood_overview - "This modern loft is locate in a nice neighborhood near to the centennial park and just"
+15. df$neighbourhood - "Silver Lake, Pacific Beach, Near Northeast/H Street Corridor, Bayou St. John, Lower H"
+16. df$notes - "Its a fun beach town - the beach, the bay, the great restaurants, the wonderfu"
+17. df$space - "Beautiful brand new loft in a central location. Near Vandy and Centennial park,only 2"
+18. df$street - "Nashville, TN, United States", "Silver Lake, Los Angeles, CA 90026, United States"
+19. df$summary - "Vacation in this Nashville home featuring a premier location - just 2 miles from downt"
+20. df$transit - "Ubers are everywhere. We also have car2go's everywhere if you have an account"
+
+----------------------------------------------------------------------------------------------------------------------------
+
+Let's treat the numerical columns which we are not going to be binning -
+
+Scale availabilities and accommodates -
+
+```{r}
+
+# summary(df_x$availability_30)
+# summary(df_x$availability_60)
+# summary(df_x$availability_90)
+avail_vars <- df_x %>%
+  select(availability_30, availability_60, availability_90, availability_365, accommodates)
+
+processed_vars <- preProcess(avail_vars, method = c("YeoJohnson"))
+
+df_x <- predict(processed_vars, df_x)
+  # test data
+tdf <- predict(preProcess(tdf %>% select(availability_30, availability_60, availability_90, availability_365, accommodates), method = c("YeoJohnson")), tdf)
+
+```
+
+Let's take a look at cleaning fee and replace NAs with the median
+
+```{r}
+qplot(df_x$cleaning_fee)
+qplot(df_x$security_deposit)
+
+df_x$cleaning_fee <- replace_na(df_x$cleaning_fee, 50)
+
+summary(df_x$cleaning_fee)
+```
+
+Create standardized columns for price, cleaning_fee, security_deposit, maximum_nights
+
+```{r}
+processed_vars <- preProcess(df_x %>% select(price, extra_people, maximum_nights), method = "YeoJohnson")
+df_x <- predict(processed_vars, df_x)
+  # test data
+tdf <- predict(preProcess(tdf %>% select(price, extra_people, maximum_nights), method = "YeoJohnson"), tdf)
+```
+
+Minimum Nights dummies
+
+```{r}
+
+# summary(df_x$minimum_nights)
+
+# View(table(df_x$minimum_nights))
+
+df_x$minimum_nights[df_x$minimum_nights > 1250] <- 100 # random
+# summary(df_x$minimum_nights)
+
+df_x <- df_x %>%
+  mutate(
+    minNigh1 = ifelse(minimum_nights == 1, 1, 0),
+    minNigh2 = ifelse(minimum_nights == 2, 1, 0),
+    minNigh3 = ifelse(minimum_nights == 3, 1, 0),
+    minNight_Excess = ifelse(minimum_nights > 3, 1, 0)
+  )
+  # test data
+tdf <- tdf %>%
+  mutate(
+    minNigh1 = ifelse(minimum_nights == 1, 1, 0),
+    minNigh2 = ifelse(minimum_nights == 2, 1, 0),
+    minNigh3 = ifelse(minimum_nights == 3, 1, 0),
+    minNight_Excess = ifelse(minimum_nights > 3, 1, 0)
+  )
+```
+
+Dummies for presence of cleaning fee and security deposit -
+
+(Commented because combined cleaning_fee with price and created dummies for security_deposit)
+
+```{r}
+# df_x <- df_x %>%
+#   mutate(
+#     isCleaningFee = ifelse(is.na(cleaning_fee) | cleaning_fee == 0, 0, 1),
+#     isSecurityDeposit = ifelse(is.na(security_deposit) | security_deposit == 0, 0, 1)
+#   )
+#   # test data
+# tdf <- tdf %>%
+#   mutate(
+#     isCleaningFee = ifelse(is.na(cleaning_fee) | cleaning_fee == 0, 0, 1),
+#     isSecurityDeposit = ifelse(is.na(security_deposit) | security_deposit == 0, 0, 1)
+#   )
+```
+
+host_response_rate, host_listings_count, host_total_listings_count
+
+```{r}
+# qplot(df_x_main$host_listings_count, df_x_main$host_total_listings_count)
+
+# Both are same
+
+df_x$host_response_rate <- replace_na(df_x$host_response_rate, 100)
+  # test data
+tdf$host_response_rate <- replace_na(tdf$host_response_rate, 100)
+
+# Scale
+
+df_x <- predict(preProcess(df_x %>% select(host_listings_count, host_response_rate), method = c("YeoJohnson")), df_x)
+  # test data
+tdf <- predict(preProcess(tdf %>% select(host_listings_count, host_response_rate), method = c("YeoJohnson")), tdf)
+```
+

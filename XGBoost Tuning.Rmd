@@ -1,0 +1,248 @@
+---
+title: "XGBoost Tuning"
+author: "Sahitya"
+date: "29/04/2020"
+output: html_document
+---
+
+XGBoost with tuning
+
+```{r}
+k <- read.csv("airbnb_train_y.csv")
+
+set.seed(12345)
+
+dft_xg <- data.frame(df, df_y$high_booking_rate)
+dft_xg$df_y.high_booking_rate <- as.factor(dft_xg$df_y.high_booking_rate)
+##select random instances from the total data, and hold out 30% as validation data
+train_insts = sample(nrow(dft_xg), .7*nrow(dft_xg))
+xgt_train <- dft_xg[train_insts,]
+xgt_test <- dft_xg[-train_insts,]
+
+#xg_classifier = xgboost(data = as.matrix(xgt_train[,-111]), label = xgt_train$df_y.high_booking_rate, nrounds = 220)
+
+#xgtt_pred = predict(xg_classifier, newdata = as.matrix(xg_test[,-111]))
+#xgtt_pred = (xgtt_pred >= 0.5)*1
+
+#table(xg_test$df_y.high_booking_rate, xgtt_pred)
+
+
+# = parameters = #
+# = eta candidates = #
+eta=c(0.05,0.1,0.2,0.5,1)
+# = colsample_bylevel candidates = #
+cs=c(1/3,2/3,1)
+# = max_depth candidates = #
+md=c(2,4,6,10)
+# = sub_sample candidates = #
+ss=c(0.25,0.5,0.75,1)
+ 
+# = standard model is the second value  of each vector above = #
+standard=c(2,2,3,2)
+
+library(xgboost)
+
+set.seed(1)
+conv_eta = matrix(NA,500,length(eta))
+pred_eta = matrix(NA,length(xgt_test$df_y.high_booking_rate), length(eta))
+colnames(conv_eta) = colnames(pred_eta) = eta
+for(i in 1:length(eta)){
+  params=list(eta = eta[i], colsample_bylevel=cs[standard[2]],
+              subsample = ss[standard[4]], max_depth = md[standard[3]],
+              min_child_weigth = 1)
+  xgb=xgboost(as.matrix(xgt_train[,-111]), label = xgt_train$df_y.high_booking_rate, nrounds = 500, params = params)
+  conv_eta[,i] = xgb$evaluation_log$train_rmse
+  pred_eta[,i] = predict(xgb, as.matrix(xgt_test[,-111]))
+}
+
+
+conv_eta = data.frame(iter=1:500, conv_eta)
+conv_eta = melt(conv_eta, id.vars = "iter")
+ggplot(data = conv_eta) + geom_line(aes(x = iter, y = value, color = variable))
+
+(RMSE_eta = sqrt(colMeans((as.numeric(xgt_test$df_y.high_booking_rate)-pred_eta)^2)))
+
+# eta  0.05       0.1       0.2       0.5         1 
+# rmse 0.3425354 0.3456618 0.3552726 0.4141428 0.6516247 
+
+# Let's go with o.05
+
+```
+
+Tune the colsample_bylevel
+
+```{r}
+set.seed(1)
+conv_cs = matrix(NA,500,length(cs))
+pred_cs = matrix(NA,length(xgt_test$df_y.high_booking_rate), length(cs))
+colnames(conv_cs) = colnames(pred_cs) = cs
+for(i in 1:length(cs)){
+  params = list(eta = eta[standard[1]], colsample_bylevel = cs[i],
+              subsample = ss[standard[4]], max_depth = md[standard[3]],
+              min_child_weigth = 1)
+  xgb=xgboost(as.matrix(xgt_train[,-111]), label = xgt_train$df_y.high_booking_rate, nrounds = 500, params = params)
+  conv_cs[,i] = xgb$evaluation_log$train_rmse
+  pred_cs[,i] = predict(xgb, as.matrix(xgt_test[,-111]))
+}
+
+conv_cs = data.frame(iter=1:500, conv_cs)
+conv_cs = melt(conv_cs, id.vars = "iter")
+ggplot(data = conv_cs) + geom_line(aes(x = iter, y = value, color = variable))
+
+(RMSE_cs = sqrt(colMeans((as.numeric(xgt_test$df_y.high_booking_rate)-pred_cs)^2)))
+# 0.333333333333333 0.666666666666667                 1 
+#         0.3448943         0.3456618         0.3448457 
+
+```
+
+max_depth
+
+```{r}
+
+set.seed(1)
+conv_md=matrix(NA,500,length(md))
+pred_md=matrix(NA,length(xgt_test$df_y.high_booking_rate), length(md))
+colnames(conv_md)=colnames(pred_md)=md
+for(i in 1:length(md)){
+  params=list(eta=eta[standard[1]],colsample_bylevel=cs[standard[2]],
+              subsample=ss[standard[4]],max_depth=md[i],
+              min_child_weigth=1)
+  xgb=xgboost(as.matrix(xgt_train[,-111]), label = xgt_train$df_y.high_booking_rate, nrounds = 500, params = params)
+  conv_md[,i] = xgb$evaluation_log$train_rmse
+  pred_md[,i] = predict(xgb, as.matrix(xgt_test[,-111]))
+}
+
+conv_md=data.frame(iter=1:500,conv_md)
+conv_md=melt(conv_md,id.vars = "iter")
+ggplot(data=conv_md)+geom_line(aes(x=iter,y=value,color=variable))
+
+(RMSE_md=sqrt(colMeans((as.numeric(xgt_test$df_y.high_booking_rate)-pred_md)^2)))
+
+#         2         4         6        10 
+# 0.3541707 0.3445640 0.3449211 0.3545224 
+
+```
+
+sub_sample
+
+```{r}
+
+set.seed(1)
+conv_ss=matrix(NA,500,length(ss))
+pred_ss=matrix(NA,length(xgt_test$df_y.high_booking_rate),length(ss))
+colnames(conv_ss)=colnames(pred_ss)=ss
+for(i in 1:length(ss)){
+  params=list(eta=eta[standard[1]],colsample_bylevel=cs[standard[2]],
+              subsample=ss[i],max_depth=md[standard[3]],
+              min_child_weigth=1)
+  xgb=xgboost(as.matrix(xgt_train[,-111]), label = xgt_train$df_y.high_booking_rate, nrounds = 500, params = params)
+  conv_ss[,i] = xgb$evaluation_log$train_rmse
+  pred_ss[,i] = predict(xgb, as.matrix(xgt_test[,-111]))
+}
+
+conv_ss=data.frame(iter=1:500,conv_ss)
+conv_ss=melt(conv_ss,id.vars = "iter")
+ggplot(data=conv_ss)+geom_line(aes(x=iter,y=value,color=variable))
+
+(RMSE_ss=sqrt(colMeans((as.numeric(xgt_test$df_y.high_booking_rate)-pred_ss)^2)))
+
+#      0.25       0.5      0.75         1 
+# 0.3503900 0.3456618 0.3430353 0.3427949 
+
+# Smaller values result in bigger errors in-sample but it may generate more robust out-of-sample estimates
+
+```
+
+min_child_weight
+
+```{r}
+
+# = min_child_weights candidates = #
+mcw=c(1,10,100,400)
+# = gamma candidates = #
+gamma=c(0.1,1,10,100)
+
+
+
+set.seed(1)
+conv_mcw = matrix(NA,500,length(mcw))
+pred_mcw = matrix(NA,length(xgt_test$df_y.high_booking_rate), length(mcw))
+colnames(conv_mcw) = colnames(pred_mcw) = mcw
+for(i in 1:length(mcw)){
+  params = list(eta = 0.1, colsample_bylevel=2/3,
+              subsample = 1, max_depth = 6,
+              min_child_weight = mcw[i], gamma = 0)
+  xgb = xgboost(as.matrix(xgt_train[,-111]), label = xgt_train$df_y.high_booking_rate, nrounds = 500, params = params)
+  conv_mcw[,i] = xgb$evaluation_log$train_rmse
+  pred_mcw[,i] = predict(xgb, as.matrix(xgt_test[,-111]))
+}
+ 
+conv_mcw = data.frame(iter=1:500, conv_mcw)
+conv_mcw = melt(conv_mcw, id.vars = "iter")
+ggplot(data = conv_mcw) + geom_line(aes(x = iter, y = value, color = variable))
+
+(RMSE_mcw = sqrt(colMeans((as.numeric(xgt_test$df_y.high_booking_rate)-pred_mcw)^2)))
+
+#      1        10       100       400 
+# 0.3430975 0.3430080 0.3431284 0.3440230 
+
+```
+
+gamma
+
+```{r}
+
+set.seed(1)
+conv_gamma = matrix(NA,500,length(gamma))
+pred_gamma = matrix(NA,length(xgt_test$df_y.high_booking_rate), length(gamma))
+colnames(conv_gamma) = colnames(pred_gamma) = gamma
+for(i in 1:length(gamma)){
+  params = list(eta = 0.1, colsample_bylevel=2/3,
+              subsample = 1, max_depth = 6, min_child_weight = 1,
+              gamma = gamma[i])
+  xgb = xgboost(as.matrix(xgt_train[,-111]), label = xgt_train$df_y.high_booking_rate, nrounds = 500, params = params)
+  conv_gamma[,i] = xgb$evaluation_log$train_rmse
+  pred_gamma[,i] = predict(xgb, as.matrix(xgt_test[,-111]))
+}
+ 
+conv_gamma = data.frame(iter=1:500, conv_gamma)
+conv_gamma = melt(conv_gamma, id.vars = "iter")
+ggplot(data = conv_gamma) + geom_line(aes(x = iter, y = value, color = variable))
+
+(RMSE_gamma = sqrt(colMeans((as.numeric(xgt_test$df_y.high_booking_rate)-pred_gamma)^2)))
+
+#      0.1         1        10       100 
+# 0.3426777 0.3432094 0.3585007 0.3805917 
+
+```
+
+lowest rmse parameters:
+
+gamma = 0.1,
+min_child_width = 10,
+subsample = 0.75,
+max_depth = 4,
+colsample_bylevel = 1,
+eta = 0.05 or 0.1
+
+```{r}
+
+set.seed(123)
+
+df_xg <- data.frame(df, df_y$high_booking_rate)
+##select random instances from the total data, and hold out 30% as validation data
+train_insts = sample(nrow(df_xg), .7*nrow(df_xg))
+xg3_train <- df_xg[train_insts,]
+xg3_test <- df_xg[-train_insts,]
+
+params = list(eta = 0.05, subsample = 0.75, max_depth = 4, gamma = 0.1, min_child_width = 10)
+
+xg3_classifier = xgboost(data = as.matrix(xg3_train[,-111]), label = as.factor(xg3_train$df_y.high_booking_rate), nrounds = 210)
+
+xgtt3_pred = predict(xg3_classifier, newdata = as.matrix(xg3_test[,-111]))
+xgtt3_pred = (xgtt3_pred >= 0.5)*1
+
+table(xg3_test$df_y.high_booking_rate, xgtt3_pred)
+
+```
+
