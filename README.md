@@ -10,7 +10,7 @@ This data got me ample opportunity to flex my cleaning and feature engineering b
 
 ## Libraries 
 
-- caret, dplyr, tidyr, tidyverse, lubridate, rapportools, qdap were used for cleaning and feature engineering
+- caret, dplyr, tidyr, tidyverse, lubridate, rapportools, qdap for cleaning and feature engineering
 - ggplot2, ggthemes for EDA
 - e1071, randomForest, xgboost for modeling
 
